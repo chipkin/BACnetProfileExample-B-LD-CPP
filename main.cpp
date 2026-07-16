@@ -863,7 +863,6 @@ bool SetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
                      uint32_t* errorCode) {
     (void)useArrayIndex;
     (void)propertyArrayIndex;
-    (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }

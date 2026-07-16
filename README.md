@@ -123,7 +123,7 @@ Lighting Output "Jade":
 | `Object_Identifier`, `Object_Type`, `Object_List`, `Property_List`, `Status_Flags` | **stack** | generated from the object you added |
 | `Current_Command_Priority` | **stack** | computed from the Priority_Array (required at Protocol_Revision 24) |
 | `Event_State` | **stack**, sort of | no alarming here, so it reads its datatype default `normal(0)` by coincidence, not computation |
-| `Present_Value` | **you** | `GetPropertyReal` / `SetPropertyReal` - a REAL light level (0-100%), commandable via the Priority_Array |
+| `Present_Value` | **you (write) / stack (read)** | `SetPropertyReal` accepts a direct write of the REAL level (0-100%); on read the **stack computes** Present_Value from the Priority_Array slots that `GetPropertyReal` serves (highest non-null slot, or Relinquish_Default) |
 | `Object_Name` | **you** | `GetPropertyCharString` |
 | the required lighting properties above (`Tracking_Value`, `In_Progress`, `Egress_Time`, `Default_Fade_Time`, ...) | **you** | typed Get callbacks (REAL / Enumerated / Unsigned / Bool) |
 | **`Lighting_Command`** | **you, via a constructed-property adapter** | `GetPropertyLightingCommand` / `SetPropertyLightingCommand` - see below |
