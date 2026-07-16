@@ -180,7 +180,7 @@ With a BACnet client (e.g. the
 | | |
 |---|---|
 | Example version | 1.0.0 |
-| `common/` helper | 1.2.0 |
+| `common/` helper | 1.3.0 |
 | CAS BACnet Stack | 6.0.0.0 — pinned at `56866997` (needs [PR #240](https://github.com/chipkin/cas-bacnet-stack/pull/240)) |
 | Protocol_Revision | 24 (the stack default — the highest it supports) |
 | Verified on | Windows (MSVC 2022, C++17) |
