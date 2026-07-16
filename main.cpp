@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: CC0-1.0
+// SPDX-License-Identifier: CC0-1.0
 // Public-domain example code (CC0) - see LICENSE. The CAS BACnet Stack itself is
 // a separate, commercially licensed product and is not covered by CC0.
 // =============================================================================
@@ -140,16 +140,12 @@ static const uint32_t LIGHTING_IN_PROGRESS_IDLE = 0;
 static const uint32_t LIGHTING_IN_PROGRESS_FADE_ACTIVE = 1;
 static const uint32_t LIGHTING_IN_PROGRESS_RAMP_ACTIVE = 2;
 
-// -- Engineering units - a Lighting Output's level is a percentage ------------
-//    Full list: submodules/cas-bacnet-stack/source/BACnetEngineeringUnits.h
-static const uint32_t ENGINEERING_UNITS_PERCENT = 98;
-
-// -- BACnet services (Services_Supported enumeration) ------------------------
-//    Full list: submodules/cas-bacnet-stack/source/BACnetServicesSupported.h
-//    common/ carries ReadProperty (12), WriteProperty (15) and
-//    DeviceCommunicationControl (17); a B-LD also needs TimeSynchronization.
-//    (utcTimeSynchronization is 36 - the profile allows either.)
-static const uint32_t SERVICE_TIME_SYNCHRONIZATION = 32;
+// NOTE: ENGINEERING_UNITS_PERCENT and SERVICE_TIME_SYNCHRONIZATION used to be
+// declared here too. They now live in common/CASBACnetStackExampleConstants.h
+// (which as of common/ v1.2.0 is the real series-wide union), so declaring them
+// again here would be an ambiguous symbol. Only values that are genuinely
+// specific to THIS profile belong in this block - see the runbook's note on
+// where profile-specific constants go.
 
 // -----------------------------------------------------------------------------
 // 1. Example + device configuration
@@ -1174,6 +1170,11 @@ int main(int argc, char** argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
 
     // --- Command line + version --------------------------------------------
+    // --help / --version print and exit, so handle them before we bind a socket
+    // or touch the stack.
+    if (CASExampleHelper::HandleHelpAndVersionArgs(argc, argv, APP_NAME, APP_VERSION)) {
+        return 0;
+    }
     const uint16_t port = CASExampleHelper::ParsePortArg(argc, argv, 47808);
     g_deviceInstance = CASExampleHelper::ParseDeviceIdArg(argc, argv, g_deviceInstance);
     CASExampleHelper::PrintVersion(APP_NAME, APP_VERSION);
@@ -1309,8 +1310,11 @@ int main(int argc, char** argv) {
     // already enabled; our Get* callbacks just supply their values. Only
     // OPTIONAL properties need SetPropertyEnabled. State_Text is optional on a
     // Multi-State Input, so we enable it here (and serve it in GetPropertyCharString).
-    BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_MULTI_STATE_INPUT,
-                                   MULTI_STATE_INPUT_INSTANCE, PROPERTY_IDENTIFIER_STATE_TEXT, true);
+    if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_MULTI_STATE_INPUT,
+                                        MULTI_STATE_INPUT_INSTANCE, PROPERTY_IDENTIFIER_STATE_TEXT, true)) {
+        printf("Error: Failed to enable State_Text on Multi-State Input 1 (Hot Pink).\n");
+        return 1;
+    }
 
     // --- Make the output objects commandable --------------------------------
     // A commandable object's Present_Value is resolved from a 16-slot
@@ -1329,12 +1333,15 @@ int main(int argc, char** argv) {
         OBJECT_TYPE_LIGHTING_OUTPUT
     };
     for (size_t i = 0; i < sizeof(outputTypes) / sizeof(outputTypes[0]); ++i) {
-        BACnetStack_SetPropertyEnabled(g_deviceInstance, outputTypes[i], 1,
-                                       PROPERTY_IDENTIFIER_PRIORITY_ARRAY, true);
-        BACnetStack_SetPropertyEnabled(g_deviceInstance, outputTypes[i], 1,
-                                       PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT, true);
-        BACnetStack_SetPropertyWritable(g_deviceInstance, outputTypes[i], 1,
-                                        PROPERTY_IDENTIFIER_PRESENT_VALUE, true);
+        if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, outputTypes[i], 1,
+                                            PROPERTY_IDENTIFIER_PRIORITY_ARRAY, true) ||
+            !BACnetStack_SetPropertyEnabled(g_deviceInstance, outputTypes[i], 1,
+                                            PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT, true) ||
+            !BACnetStack_SetPropertyWritable(g_deviceInstance, outputTypes[i], 1,
+                                             PROPERTY_IDENTIFIER_PRESENT_VALUE, true)) {
+            printf("Error: Failed to make object type %u instance 1 commandable.\n", outputTypes[i]);
+            return 1;
+        }
     }
 
     // --- Make Lighting_Command writable (the B-LD addition) ------------------
