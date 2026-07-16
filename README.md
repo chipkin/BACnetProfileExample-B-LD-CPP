@@ -80,6 +80,15 @@ parameters that operation needs:
 It tells the light **how** to get somewhere, not just where: *"fade to 75 % over
 3 seconds"* rather than *"be 75 % now"*.
 
+> **Which priority does a `Lighting_Command` command at?** Its **embedded**
+> `priority` field — *not* the WriteProperty service priority you sent the request
+> at. Write a `Lighting_Command` with no `priority` field and it lands at
+> `Lighting_Command_Default_Priority` (16), even if the WriteProperty itself used
+> priority 8. The two are unrelated: the service priority governs the write of the
+> `Lighting_Command` property; the light's Priority_Array slot is chosen by the
+> command's own field. (A direct `Present_Value` write, path #1, *does* use the
+> WriteProperty service priority — that is the difference between the two paths.)
+
 **The application never encodes or decodes that SEQUENCE.** It hands the stack the
 fields as plain numbers through `RegisterCallbackGetPropertyLightingCommand` and
 receives them the same way through `RegisterCallbackSetPropertyLightingCommand`.
