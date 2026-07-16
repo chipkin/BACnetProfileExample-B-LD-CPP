@@ -113,6 +113,48 @@ consistent, and that is per spec:
 | `Default_Step_Increment` | 5.0 | % |
 | `Lighting_Command_Default_Priority` | 16 | Priority a `Lighting_Command` writes at when it names none |
 
+## Who serves what: application or stack?
+
+The most common question reading `main.cpp` is "who answers this property?" For the
+Lighting Output "Jade":
+
+| Property | Served by | How |
+|---|---|---|
+| `Object_Identifier`, `Object_Type`, `Object_List`, `Property_List`, `Status_Flags` | **stack** | generated from the object you added |
+| `Current_Command_Priority` | **stack** | computed from the Priority_Array (required at Protocol_Revision 24) |
+| `Event_State` | **stack**, sort of | no alarming here, so it reads its datatype default `normal(0)` by coincidence, not computation |
+| `Present_Value` | **you** | `GetPropertyReal` / `SetPropertyReal` - a REAL light level (0-100%), commandable via the Priority_Array |
+| `Object_Name` | **you** | `GetPropertyCharString` |
+| the required lighting properties above (`Tracking_Value`, `In_Progress`, `Egress_Time`, `Default_Fade_Time`, ...) | **you** | typed Get callbacks (REAL / Enumerated / Unsigned / Bool) |
+| **`Lighting_Command`** | **you, via a constructed-property adapter** | `GetPropertyLightingCommand` / `SetPropertyLightingCommand` - see below |
+
+Note there is **no `Units`** row: a Lighting Output has no Units property (its level
+is a dimensionless percent), so serving one would be dead code the stack never calls.
+
+### Serving a constructed (composite) property
+
+`Lighting_Command` is a **constructed** BACnet datatype - a SEQUENCE of an operation
+plus several optional fields - not a primitive like REAL or Enumerated. A plain typed
+callback (`GetPropertyReal`, `GetPropertyEnumerated`, ...) cannot serve it; the stack
+would answer *unsupported-datatype*. Instead you register a **dedicated adapter
+callback** for that property type (added to the CAS BACnet Stack in
+[PR #240](https://github.com/chipkin/cas-bacnet-stack/pull/240)):
+
+```cpp
+// Register the Lighting_Command adapter callbacks (not the generic typed ones):
+BACnetStack_RegisterCallbackGetPropertyLightingCommand(GetPropertyLightingCommand);
+BACnetStack_RegisterCallbackSetPropertyLightingCommand(SetPropertyLightingCommand);
+```
+
+Your callback then works in the stack's **decoded field struct**, not raw bytes -
+`GetPropertyLightingCommand` fills an operation + `use*` flags + values, and the
+stack encodes the SEQUENCE on the wire. There is no BACnet byte-twiddling anywhere in
+`main.cpp`. The `use*` flags are load-bearing: an omitted optional (e.g. a `fadeTo`
+with no fade-time) must be left `use*=false` so the stack/light resolves it to the
+object's default, rather than forced to a literal `0`. This is the pattern for **any**
+constructed property (`BACnetDateTime`, `BACnetLightingCommand`, ...): a typed adapter
+that speaks the decoded struct, never the wire bytes.
+
 ## Why this example needs a recent stack
 
 `Lighting_Command` is a **required** property of the object that **defines** this

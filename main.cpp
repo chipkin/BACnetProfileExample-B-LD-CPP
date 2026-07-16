@@ -174,10 +174,10 @@ static uint32_t g_deviceInstance = 389016;
 static const uint32_t VENDOR_IDENTIFIER = 389;
 static const char* DEVICE_NAME = "Rainbow";
 static const char* DEVICE_DESCRIPTION =
-    "Chipkin CAS BACnet Stack Example - B-LD (Application Specific Controller) "
-    "profile. Demonstrates DS-RP-B + DS-WP-B + DM-DCC-B: ReadProperty, "
-    "WriteProperty, and DeviceCommunicationControl with read-only sensor inputs "
-    "and commandable outputs.";
+    "Chipkin CAS BACnet Stack Example - B-LD (Lighting Device) profile. A luminaire "
+    "with a commandable Lighting Output whose level is driven by a Priority_Array and "
+    "by the constructed Lighting_Command property (fade/ramp/step), plus read-only "
+    "sensor inputs, DeviceCommunicationControl, and time synchronisation (DM-TS-B).";
 
 // Device identity strings (read by clients, and used to populate I-Am).
 static const char* VENDOR_NAME = "Chipkin Automation Systems";
@@ -555,11 +555,10 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
             *value = g_lightingInProgress;
             return true;
         }
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_UNITS) {
-            // A Lighting Output's level is a percentage.
-            *value = ENGINEERING_UNITS_PERCENT;
-            return true;
-        }
+        // NB: a Lighting Output has NO Units property (its level is a dimensionless
+        // percent, and Units is not in the object's required or optional set), so
+        // there is deliberately no Units arm here - serving one would be dead code
+        // the stack never calls.
     }
     return false;
 }
@@ -869,18 +868,23 @@ bool SetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
         return false;
     }
     Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && objectType == OBJECT_TYPE_ANALOG_OUTPUT &&
-        propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-        // An Analog Output accepts any REAL here. A real device that models the
-        // optional Min_Pres_Value / Max_Pres_Value properties would reject an
-        // out-of-band value with value-out-of-range, exactly as the Binary and
-        // Multi-State Output setters below do for their fixed ranges:
-        //     if (value < g_min || value > g_max) {
-        //         *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE; return false;
-        //     }
+    if (c != NULL && propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE &&
+        (objectType == OBJECT_TYPE_ANALOG_OUTPUT || objectType == OBJECT_TYPE_LIGHTING_OUTPUT)) {
+        // Both the Analog Output and the Lighting Output carry a commandable REAL
+        // Present_Value, so both accept a direct write here - the same way
+        // GetPropertyReal serves both. A Lighting Output's Present_Value is a
+        // light LEVEL in percent, so unlike the Analog Output we DO bound it to
+        // 0..100 (an Analog Output would only reject out-of-band values if it
+        // modelled the optional Min_Pres_Value / Max_Pres_Value properties).
+        if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && (value < 0.0f || value > 100.0f)) {
+            *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
+            return false;
+        }
         CommandWrite(c, priority, (double)value);
-        printf("WriteProperty: Analog Output %u (Chartreuse) <- %.2f @ priority %u\n",
-               objectInstance, value, EffectivePriority(priority));
+        const char* label = (objectType == OBJECT_TYPE_LIGHTING_OUTPUT)
+                                ? "Lighting Output" : "Analog Output";
+        printf("WriteProperty: %s %u <- %.2f @ priority %u\n",
+               label, objectInstance, value, EffectivePriority(priority));
         return true;
     }
     return false;
@@ -961,6 +965,7 @@ bool SetPropertyNull(const uint32_t deviceInstance, const uint16_t objectType,
         printf("WriteProperty: relinquished %s %u @ priority %u\n",
                objectType == OBJECT_TYPE_ANALOG_OUTPUT ? "Analog Output" :
                objectType == OBJECT_TYPE_BINARY_OUTPUT ? "Binary Output" :
+               objectType == OBJECT_TYPE_LIGHTING_OUTPUT ? "Lighting Output" :
                "Multi-State Output",
                objectInstance, EffectivePriority(priority));
         return true;
@@ -1042,6 +1047,15 @@ bool SetPropertyLightingCommand(const uint32_t deviceInstance, const uint16_t ob
         return false;
     }
     if (usePriority && (priority < 1 || priority > BACNET_PRIORITY_ARRAY_SIZE)) {
+        *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
+        return false;
+    }
+    // fadeTo and rampTo REQUIRE a target level (clause 12.54.9). Reject the write
+    // if it is missing rather than recording a command that never moves the light -
+    // otherwise the write succeeds, nothing happens, and a later read reports back
+    // a fadeTo with no target that never took effect.
+    if ((operation == LIGHTING_OPERATION_FADE_TO || operation == LIGHTING_OPERATION_RAMP_TO) &&
+        !useTargetLevel) {
         *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
         return false;
     }
