@@ -1170,27 +1170,42 @@ bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t ena
                                 const bool useTimeDuration, const uint16_t timeDuration,
                                 uint32_t* errorCode) {
     if (deviceInstance != g_deviceInstance) {
+        // Not our device. Set *errorCode even here - see the note at the end of
+        // this function: a false return with *errorCode unset ships
+        // "Error Code = success(84)", which is meaningless on the wire.
+        *errorCode = ERROR_CODE_OPTIONAL_FUNCTIONALITY_NOT_SUPPORTED;
         return false;
     }
 
     // Check the password if this device requires one. A device with no configured
     // password (DCC_PASSWORD == "") accepts any request.
     //
-    // The compare is length-checked first (so memcmp never reads past the wire
-    // buffer, which is NOT null-terminated) and folds the byte comparison into a
-    // single accumulator so it does not short-circuit on the first wrong byte -
-    // a constant-time-style compare that avoids leaking how much of the password
-    // matched via timing. On a mismatch we set *errorCode = password-failure; the
-    // stack pairs that with Error Class = SECURITY (see clause 16.1.1.3.1).
+    // Compare by LENGTH FIRST, then bytes. The reason is not buffer safety - the
+    // stack hands us a null-terminated string - it is that a BACnet
+    // CharacterString may legitimately contain embedded NULs, and strcmp would
+    // silently compare only up to the first one. Never strcmp a wire string.
+    //
+    // On a mismatch we set *errorCode = password-failure, and the stack pairs
+    // that specific code with Error Class = SECURITY (clause 16.1.1.3.1).
+    //
+    // NOTE ON SECURITY, because this is a tutorial and the honest answer matters:
+    // a DCC password crosses the wire in PLAINTEXT. This is not a security
+    // boundary - it is a guard against accidents. Anyone who can time this
+    // compare can simply sniff the password instead. If you need real protection,
+    // use BACnet/SC. (Do not read the accumulator loop below as a constant-time
+    // compare: the printf on the reject path dwarfs any timing signal it removes.)
     const size_t requiredLength = strlen(DCC_PASSWORD);
     if (requiredLength > 0) {
-        unsigned diff = (password == NULL) ? 1u : (unsigned)(passwordLength ^ requiredLength);
-        if (password != NULL && passwordLength == requiredLength) {
+        bool matches = (password != NULL) && (passwordLength == requiredLength);
+        if (matches) {
             for (size_t i = 0; i < requiredLength; ++i) {
-                diff |= (unsigned)((unsigned char)password[i] ^ (unsigned char)DCC_PASSWORD[i]);
+                if (password[i] != DCC_PASSWORD[i]) {
+                    matches = false;
+                    break;
+                }
             }
         }
-        if (diff != 0) {
+        if (!matches) {
             printf("DeviceCommunicationControl: REJECTED (password failure)\n");
             *errorCode = ERROR_CODE_PASSWORD_FAILURE;
             return false;
@@ -1210,11 +1225,22 @@ bool DeviceCommunicationControl(const uint32_t deviceInstance, const uint8_t ena
     } else {
         printf("DeviceCommunicationControl: %s (indefinitely)\n", action);
     }
-    // Return true to accept. We do NOT set *errorCode here: when a callback
-    // returns false without setting it, the stack supplies a sensible default
-    // error; we only write *errorCode to override that with a specific one (as the
-    // password path above does, and as the SetProperty* callbacks do for
-    // value-out-of-range).
+    // Accept. Nothing to write to *errorCode on the success path.
+    //
+    // IMPORTANT, AND IT IS NOT WHAT YOU WOULD GUESS: this callback MUST set
+    // *errorCode on EVERY `false` return. The DCC path has no default. The stack
+    // pre-initialises errorCode to BACnetErrorCode::success (which is 84, NOT 0)
+    // and then, on a false return, does:
+    //     if (errorCode == passwordFailure) -> Error Class SECURITY
+    //     else                              -> Error Class SERVICES, code = errorCode
+    // So returning false without setting *errorCode puts the literal nonsense
+    // "Error Class = SERVICES, Error Code = success(84)" on the wire.
+    //
+    // This differs from the SetProperty* callbacks, which DO have a sensible
+    // fallback (writeAccessDenied) - so do not carry the habit across.
+    // (The stack's own comment at that site says "otherwise assume
+    // passwordFailure"; the code does not do that. Trust the code, not the
+    // comment - including this one: go read it.)
     return true;
 }
 
