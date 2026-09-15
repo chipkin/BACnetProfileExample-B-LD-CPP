@@ -270,8 +270,14 @@ With a BACnet client (e.g. the
    (`Default_Fade_Time`), not 0. That is the `use*` flag doing its job.
 6. **WriteProperty** `Lighting_Command` = `{operation: stepUp}` → the light rises
    by `Default_Step_Increment` (5 %).
-7. **WriteProperty** `Lighting_Command` with `target-level` = `150.0` → rejected
-   with `value-out-of-range`.
+7. **WriteProperty** `Lighting_Command` with `target-level` = `150.0` → rejected.
+   Verified by wire test (bacpypes3): the response was a **Reject-PDU**
+   (`parameter-out-of-range`), not an Error-PDU carrying
+   `SetPropertyLightingCommand`'s own `ERROR_CODE_VALUE_OUT_OF_RANGE` check -
+   the stack appears to bound `target-level` before the callback is reached, at
+   least for this magnitude of out-of-range value. The callback's own check is
+   still correct defense in depth; which BACnet-level rejection a given client
+   actually sees may depend on how far out of range the value is.
 8. **WriteProperty** `Present_Value` = `20.0` at priority 8 → the light goes to
    20 % directly, no fade. Both paths drive the same `Priority_Array`.
 9. **TimeSynchronization** → the console logs the time the device would set.
