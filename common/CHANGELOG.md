@@ -12,6 +12,38 @@ entry here, and must then be re-copied into **every** example in the series.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the folder adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-09-09
+
+### Changed — BREAKING, required by the CAS BACnet Stack interface update
+
+The stack's transport and time callbacks changed shape. Every example in the
+series must take this version of `common/` together with the matching `main.cpp`
+edits; an old `main.cpp` will not build against this helper and vice versa.
+
+- **A link is now identified by its Network Port object INSTANCE, not by a
+  transport network type** (stack issues #822/#556). Three call sites moved:
+  - `RegisterCallbackReceiveMessage` → **`RegisterCallbackReceiveMessageForPort`**;
+    the callback's trailing `uint8_t* networkType` became
+    `uint32_t* networkPortInstance`.
+  - `RegisterCallbackSendMessage` → **`RegisterCallbackSendMessageForPort`**;
+    the callback's `const uint8_t networkType` became
+    `const uint32_t networkPortInstance`.
+  - `BACnetStack_SendIAm()` takes the Network Port instance where it took the
+    network type.
+- **New: `SetNetworkPortInstance()`.** The helper has to know which Network Port
+  object owns its socket. Call it after `BACnetStack_AddNetworkPortObject()` and
+  before `RegisterCommonCallbacks()`. It defaults to 1 (the series convention),
+  so an example using instance 1 keeps working without the call, but calling it
+  keeps `main.cpp`'s Network Port instance the single source of truth.
+- **`GetSystemTime` returns `CASBACnetTime` (`int64_t`), not `time_t`.** `time_t`
+  is 32-bit in some toolchains and 64-bit in others; with the stack and the
+  application disagreeing, every timestamp crossing the ABI was corrupted.
+- **New error-code constants** in `CASBACnetStackExampleConstants.h`:
+  `ERROR_CODE_READ_ACCESS_DENIED`, `ERROR_CODE_UNKNOWN_PROPERTY`,
+  `ERROR_CODE_INVALID_ARRAY_INDEX` and `ERROR_CODE_SUCCESS`, for the `errorCode`
+  out-parameter the `GetProperty*` callbacks gained (stack issue #974).
+  `NETWORK_TYPE_IP` is retained but is no longer used by the helper.
+
 ## [1.5.1] - 2026-07-31
 
 ### Fixed

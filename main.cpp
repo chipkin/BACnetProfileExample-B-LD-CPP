@@ -972,6 +972,11 @@ bool SetPropertyNull(const uint32_t deviceInstance, const uint16_t objectType,
 }
 
 // -----------------------------------------------------------------------------
+// F-LIGHT - canonical implementation (B-LD is the reference for this feature:
+// Lighting Output 1 "Jade", OBJECT_TYPE_LIGHTING_OUTPUT = 54. A later series repo
+// that needs a commandable Lighting Output copies this section plus the
+// Present_Value/Priority_Array wiring in SetPropertyReal/GetPropertyReal above,
+// then renames the instance/label).
 // 2c. Lighting_Command callbacks - the heart of B-LD (DS-LO-B)
 //
 // Lighting_Command is a CONSTRUCTED property: a BACnetLightingCommand SEQUENCE
@@ -1002,11 +1007,16 @@ bool GetPropertyLightingCommand(const uint32_t deviceInstance, const uint16_t ob
                                 bool* useRampRate, float* rampRate,
                                 bool* useStepIncrement, float* stepIncrement,
                                 bool* useFadeTime, uint32_t* fadeTime,
-                                bool* usePriority, uint32_t* priority) {
+                                bool* usePriority, uint32_t* priority,
+                                uint32_t* errorCode) {
     if (deviceInstance != g_deviceInstance ||
         objectType != OBJECT_TYPE_LIGHTING_OUTPUT ||
         objectInstance != LIGHTING_OUTPUT_INSTANCE ||
         propertyIdentifier != PROPERTY_IDENTIFIER_LIGHTING_COMMAND) {
+        // Not a match - same "let another registered callback try" convention as
+        // every other Get/Set callback in this file (see SetPropertyReal above).
+        // errorCode is deliberately left untouched here.
+        (void)errorCode;
         return false;
     }
 
@@ -1134,11 +1144,29 @@ bool SetPropertyLightingCommand(const uint32_t deviceInstance, const uint16_t ob
 }
 
 // -----------------------------------------------------------------------------
-// 2d. TimeSynchronization callback - the other B-LD addition (DM-TS-B)
+// F-TIMESYNC - canonical implementation (B-LD is the reference for this feature;
+// later series repos that need DM-TS-B copy this block verbatim, then adjust only
+// the printf label). 2d. TimeSynchronization callback - the other B-LD addition
+// (DM-TS-B)
 //
 // A lighting system broadcasts the time so every luminaire's scheduled scenes line
-// up. The stack decodes the request and hands us the wall-clock fields; a real
-// device would set its RTC here.
+// up. The stack decodes the request and hands us the wall-clock fields. Registered
+// for BOTH TimeSynchronization and UTCTimeSynchronization below
+// (BACnetStack_Enable*TimeSynchronization) - the stack routes both services
+// through this same callback.
+//
+// IMPORTANT / NOT YET WIRED TO Local_Date / Local_Time: this callback only prints
+// the incoming value - "ON REAL HARDWARE: set your RTC here" below is literal.
+// Local_Date and Local_Time are served by the stack from
+// BACnetStack_RegisterCallbackGetSystemTime (HelperGetSystemTime in common/,
+// registered by RegisterCommonCallbacks()), which returns the real host OS clock
+// via time(0) and is NOT updated by a TimeSynchronization write. So a client that
+// sends a time matching the host clock will see Local_Date/Local_Time agree with
+// it, but a deliberately different TimeSynchronization value will NOT be reflected
+// back in a subsequent Local_Date/Local_Time read. A later repo that needs the
+// synced value to actually be readable back must store it here (e.g. in a
+// g_syncedDateTime) and serve GetPropertyDate/GetPropertyTime from that instead of
+// relying on HelperGetSystemTime.
 // -----------------------------------------------------------------------------
 bool SetSystemTime(const uint32_t deviceInstance, const uint8_t year, const uint8_t month,
                    const uint8_t day, const uint8_t weekday, const uint8_t hour,
