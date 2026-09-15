@@ -95,6 +95,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>  // F-TIMESYNC: InitSyncedDateTimeFromHost() seeds Local_Date/Local_Time
 
 #if defined(_WIN32)
 #include <windows.h> // Sleep()
@@ -128,6 +129,10 @@ static const uint32_t PROPERTY_IDENTIFIER_IN_PROGRESS = 378;
 static const uint32_t PROPERTY_IDENTIFIER_LIGHTING_COMMAND = 380;
 static const uint32_t PROPERTY_IDENTIFIER_LIGHTING_COMMAND_DEFAULT_PRIORITY = 381;
 static const uint32_t PROPERTY_IDENTIFIER_EGRESS_ACTIVE = 386;
+
+// -- F-TIMESYNC: Local_Date / Local_Time property identifiers (Device object) --
+static const uint32_t PROPERTY_IDENTIFIER_LOCAL_DATE = 56;
+static const uint32_t PROPERTY_IDENTIFIER_LOCAL_TIME = 57;
 
 // -- BACnetLightingOperation - what a Lighting_Command tells the light to DO --
 //    Full list: submodules/cas-bacnet-stack/source/BACnetLightingOperation.h
@@ -415,7 +420,11 @@ static bool ReadPrioritySlot(const Commandable* c, uint32_t propertyIdentifier,
 bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
                      float* value, const bool useArrayIndex,
-                     const uint32_t propertyArrayIndex) {
+                     const uint32_t propertyArrayIndex, uint32_t* errorCode) {
+    // None of the arms below is an error condition (an unmatched (object, property)
+    // just means "let the stack substitute its default" - see the note at the top
+    // of this section) - so errorCode is deliberately never set in this callback.
+    (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
@@ -486,7 +495,8 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
 bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectType,
                            const uint32_t objectInstance, const uint32_t propertyIdentifier,
                            uint32_t* value, const bool useArrayIndex,
-                           const uint32_t propertyArrayIndex) {
+                           const uint32_t propertyArrayIndex, uint32_t* errorCode) {
+    (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
@@ -567,7 +577,8 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
 bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t objectType,
                                 const uint32_t objectInstance, const uint32_t propertyIdentifier,
                                 uint32_t* value, const bool useArrayIndex,
-                                const uint32_t propertyArrayIndex) {
+                                const uint32_t propertyArrayIndex, uint32_t* errorCode) {
+    (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
@@ -661,7 +672,8 @@ bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
 bool GetPropertyBool(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
                      bool* value, const bool useArrayIndex,
-                     const uint32_t propertyArrayIndex) {
+                     const uint32_t propertyArrayIndex, uint32_t* errorCode) {
+    (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
@@ -718,9 +730,10 @@ bool GetPropertyOctetString(const uint32_t deviceInstance, const uint16_t object
                             const uint32_t objectInstance, const uint32_t propertyIdentifier,
                             uint8_t* value, uint32_t* valueElementCount,
                             const uint32_t maxElementCount, const bool useArrayIndex,
-                            const uint32_t propertyArrayIndex) {
+                            const uint32_t propertyArrayIndex, uint32_t* errorCode) {
     (void)useArrayIndex;
     (void)propertyArrayIndex;
+    (void)errorCode;
     if (deviceInstance != g_deviceInstance ||
         objectType != OBJECT_TYPE_NETWORK_PORT ||
         objectInstance != NETWORK_PORT_INSTANCE ||
@@ -768,7 +781,9 @@ bool GetPropertyCharString(const uint32_t deviceInstance, const uint16_t objectT
                            const uint32_t objectInstance, const uint32_t propertyIdentifier,
                            char* value, uint32_t* valueElementCount,
                            const uint32_t maxElementCount, uint8_t* encodingType,
-                           const bool useArrayIndex, const uint32_t propertyArrayIndex) {
+                           const bool useArrayIndex, const uint32_t propertyArrayIndex,
+                           uint32_t* errorCode) {
+    (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
@@ -1150,35 +1165,121 @@ bool SetPropertyLightingCommand(const uint32_t deviceInstance, const uint16_t ob
 // (DM-TS-B)
 //
 // A lighting system broadcasts the time so every luminaire's scheduled scenes line
-// up. The stack decodes the request and hands us the wall-clock fields. Registered
-// for BOTH TimeSynchronization and UTCTimeSynchronization below
-// (BACnetStack_Enable*TimeSynchronization) - the stack routes both services
-// through this same callback.
+// up. The stack decodes the request and hands us the wall-clock fields.
 //
-// IMPORTANT / NOT YET WIRED TO Local_Date / Local_Time: this callback only prints
-// the incoming value - "ON REAL HARDWARE: set your RTC here" below is literal.
-// Local_Date and Local_Time are served by the stack from
-// BACnetStack_RegisterCallbackGetSystemTime (HelperGetSystemTime in common/,
-// registered by RegisterCommonCallbacks()), which returns the real host OS clock
-// via time(0) and is NOT updated by a TimeSynchronization write. So a client that
-// sends a time matching the host clock will see Local_Date/Local_Time agree with
-// it, but a deliberately different TimeSynchronization value will NOT be reflected
-// back in a subsequent Local_Date/Local_Time read. A later repo that needs the
-// synced value to actually be readable back must store it here (e.g. in a
-// g_syncedDateTime) and serve GetPropertyDate/GetPropertyTime from that instead of
-// relying on HelperGetSystemTime.
+// ONLY TimeSynchronization is registered below (BACnetStack_SetServiceEnabled,
+// SERVICE_TIME_SYNCHRONIZATION, in main()) - NOT UTCTimeSynchronization. B-LD's
+// profile allows DM-TS-B *or* DM-UTC-B (not both required); this example does
+// local time only. Confirmed by wire test: an UTCTimeSynchronization request
+// against a running instance is rejected by the stack itself with "Services is
+// not supported service=[9]" before this callback is even reached. A later repo
+// that needs DM-UTC-B instead (or as well) must additionally call
+// BACnetStack_SetServiceEnabled(..., SERVICE_UTC_TIME_SYNCHRONIZATION, true) -
+// the stack routes both services through this SAME SetSystemTime callback, so no
+// second callback is needed, only the extra enable call.
+//
+// Local_Date / Local_Time: this callback ALSO stores the synced value into
+// g_syncedDateTime (below), which GetPropertyDate/GetPropertyTime (next) serve
+// back. Until the first TimeSynchronization arrives, g_syncedDateTime starts
+// seeded from the real host clock (see InitSyncedDateTimeFromHost, called once at
+// start-up) so a ReadProperty of Local_Date/Local_Time before any sync still
+// succeeds instead of erroring value-not-initialized.
 // -----------------------------------------------------------------------------
+struct SyncedDateTime {
+    bool valid = false;
+    uint8_t yearMinus1900 = 0, month = 1, day = 1, weekday = 1;
+    uint8_t hour = 0, minute = 0, second = 0, hundredthSecond = 0;
+};
+static SyncedDateTime g_syncedDateTime;
+
+// Seed g_syncedDateTime from the host OS clock at start-up, so Local_Date /
+// Local_Time answer something sane even before a client ever sends
+// TimeSynchronization. ON REAL HARDWARE this would read the device's own RTC
+// instead.
+static void InitSyncedDateTimeFromHost() {
+    const time_t now = time(NULL);
+    struct tm parts;
+#if defined(_WIN32)
+    localtime_s(&parts, &now);
+#else
+    localtime_r(&now, &parts);
+#endif
+    g_syncedDateTime.yearMinus1900 = (uint8_t)parts.tm_year;
+    g_syncedDateTime.month = (uint8_t)(parts.tm_mon + 1);
+    g_syncedDateTime.day = (uint8_t)parts.tm_mday;
+    // BACnet weekday is 1=Monday..7=Sunday; struct tm's tm_wday is 0=Sunday..6=Saturday.
+    g_syncedDateTime.weekday = (uint8_t)(parts.tm_wday == 0 ? 7 : parts.tm_wday);
+    g_syncedDateTime.hour = (uint8_t)parts.tm_hour;
+    g_syncedDateTime.minute = (uint8_t)parts.tm_min;
+    g_syncedDateTime.second = (uint8_t)parts.tm_sec;
+    g_syncedDateTime.hundredthSecond = 0;
+    g_syncedDateTime.valid = true;
+}
+
 bool SetSystemTime(const uint32_t deviceInstance, const uint8_t year, const uint8_t month,
                    const uint8_t day, const uint8_t weekday, const uint8_t hour,
                    const uint8_t minute, const uint8_t second, const uint8_t hundrethSeconds) {
-    (void)weekday;
-    (void)hundrethSeconds;
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
-    // ON REAL HARDWARE: set your RTC here. `year` is an offset from 1900, per BACnet.
-    printf("TimeSynchronization: %u-%02u-%02u %02u:%02u:%02u (device clock would be set here)\n",
+    // ON REAL HARDWARE: set your RTC here too. `year` is an offset from 1900, per
+    // BACnet. This example instead remembers the value so Local_Date/Local_Time
+    // (served below) read it back - see the block comment above.
+    g_syncedDateTime.yearMinus1900 = year;
+    g_syncedDateTime.month = month;
+    g_syncedDateTime.day = day;
+    g_syncedDateTime.weekday = weekday;
+    g_syncedDateTime.hour = hour;
+    g_syncedDateTime.minute = minute;
+    g_syncedDateTime.second = second;
+    g_syncedDateTime.hundredthSecond = hundrethSeconds;
+    g_syncedDateTime.valid = true;
+    printf("TimeSynchronization: %u-%02u-%02u %02u:%02u:%02u (Local_Date/Local_Time now read this back)\n",
            (unsigned)(1900 + year), month, day, hour, minute, second);
+    return true;
+}
+
+// GET - Local_Date / Local_Time, from g_syncedDateTime (see the block comment
+// above). Required Device properties; without this callback a ReadProperty of
+// either fails value-not-initialized (confirmed by wire test before this was
+// added).
+bool GetPropertyDate(const uint32_t deviceInstance, const uint16_t objectType,
+                     const uint32_t objectInstance, const uint32_t propertyIdentifier,
+                     uint8_t* yearMinus1900, uint8_t* month, uint8_t* day, uint8_t* weekday,
+                     const bool useArrayIndex, const uint32_t propertyArrayIndex,
+                     uint32_t* errorCode) {
+    (void)useArrayIndex;
+    (void)propertyArrayIndex;
+    (void)errorCode;
+    if (deviceInstance != g_deviceInstance || objectType != OBJECT_TYPE_DEVICE ||
+        objectInstance != g_deviceInstance ||
+        propertyIdentifier != PROPERTY_IDENTIFIER_LOCAL_DATE || !g_syncedDateTime.valid) {
+        return false;
+    }
+    *yearMinus1900 = g_syncedDateTime.yearMinus1900;
+    *month = g_syncedDateTime.month;
+    *day = g_syncedDateTime.day;
+    *weekday = g_syncedDateTime.weekday;
+    return true;
+}
+
+bool GetPropertyTime(const uint32_t deviceInstance, const uint16_t objectType,
+                     const uint32_t objectInstance, const uint32_t propertyIdentifier,
+                     uint8_t* hour, uint8_t* minute, uint8_t* second, uint8_t* hundredthSecond,
+                     const bool useArrayIndex, const uint32_t propertyArrayIndex,
+                     uint32_t* errorCode) {
+    (void)useArrayIndex;
+    (void)propertyArrayIndex;
+    (void)errorCode;
+    if (deviceInstance != g_deviceInstance || objectType != OBJECT_TYPE_DEVICE ||
+        objectInstance != g_deviceInstance ||
+        propertyIdentifier != PROPERTY_IDENTIFIER_LOCAL_TIME || !g_syncedDateTime.valid) {
+        return false;
+    }
+    *hour = g_syncedDateTime.hour;
+    *minute = g_syncedDateTime.minute;
+    *second = g_syncedDateTime.second;
+    *hundredthSecond = g_syncedDateTime.hundredthSecond;
     return true;
 }
 
@@ -1288,6 +1389,10 @@ int main(int argc, char** argv) {
     // Show printf output immediately, even when stdout is piped to a file.
     setvbuf(stdout, NULL, _IONBF, 0);
 
+    // F-TIMESYNC: seed Local_Date/Local_Time from the host clock so they read
+    // back something valid even before any TimeSynchronization arrives.
+    InitSyncedDateTimeFromHost();
+
     // --- Load the CAS BACnet Stack -------------------------------------------
     // Required in every link mode (source/static/DLL) before any other
     // BACnetStack_* call - see CASBACnetStackAdapter.h. In DLL mode this is the
@@ -1332,6 +1437,9 @@ int main(int argc, char** argv) {
     BACnetStack_RegisterCallbackGetPropertyCharacterString(GetPropertyCharString);
     BACnetStack_RegisterCallbackGetPropertyBool(GetPropertyBool);
     BACnetStack_RegisterCallbackGetPropertyOctetString(GetPropertyOctetString);
+    // F-TIMESYNC: Local_Date / Local_Time, served from g_syncedDateTime.
+    BACnetStack_RegisterCallbackGetPropertyDate(GetPropertyDate);
+    BACnetStack_RegisterCallbackGetPropertyTime(GetPropertyTime);
     // The "set" callbacks accept WriteProperty (DS-WP-B) to the commandable
     // outputs. One callback per written data type, plus the NULL callback that
     // relinquishes a priority slot.
@@ -1444,7 +1552,7 @@ int main(int argc, char** argv) {
     // networkNumber 0 with quality "unknown" describes a local port that has not
     // learned its network number - the right answer for a device that is not a
     // router and has not been told one.
-    if (!BACnetStack_AddNetworkPortObjectWithNetworkNumber(
+    if (!BACnetStack_AddNetworkPortObject(
             g_deviceInstance, NETWORK_PORT_INSTANCE,
             NETWORK_PORT_NETWORK_TYPE_IPV4,
             NETWORK_PORT_PROTOCOL_LEVEL_BACNET_APPLICATION,
