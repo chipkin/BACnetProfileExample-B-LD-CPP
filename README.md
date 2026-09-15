@@ -504,15 +504,17 @@ Profile definitions: ANSI/ASHRAE 135-2024 Annex L. BIBB definitions: Annex K. Ge
 
 ## Footprint
 
-Release-build size and start-up timing, from the latest tagged release's CI run
-(`metrics-windows.json` / `metrics-linux.json`), built with
-`CAS_BACNET_STACK_LINK=STATIC`. Not yet released - filled in at the first
-`v1.1.0` tag (§8 of the series runbook).
+Release-build sizes and start-up timing, from the latest tagged release's CI
+run (`metrics-windows.json` / `metrics-linux.json`), both built with
+`CAS_BACNET_STACK_LINK=STATIC`:
 
 <!-- METRICS -->
 | Platform | Binary | Size | SHA-256 (prefix) | Start-up to `ready` | Stack commit | Link mode | Compiler |
 |---|---|---|---|---|---|---|---|
-| _pending first release_ | | | | | | | |
+| Windows x64 (windows-2022) | `BACnetExampleBLD.exe` | 3,253,760 bytes (~3.1 MiB) | `82e3903e5ec56419` | 75 ms | `abd4cee1` | STATIC | Visual Studio 17 2022 |
+| Linux x64 (ubuntu-latest) | `BACnetExampleBLD` | 45,128 bytes (~44 KiB) | `18c61c8aaef5d06f` | 109 ms | `abd4cee1` | STATIC | `/usr/bin/c++` |
+
+From release [v1.1.0](https://github.com/chipkin/BACnetProfileExample-B-LD-CPP/releases/tag/v1.1.0) (`metrics-windows.json` / `metrics-linux.json`).
 
 ## Versions
 
