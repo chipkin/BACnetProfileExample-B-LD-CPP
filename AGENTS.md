@@ -23,15 +23,22 @@ This repository is self-contained:
 
 ## Build
 
+This example links the CAS BACnet Stack as a prebuilt **STATIC** library - build
+the library once from the pinned submodule commit, then configure and build:
+
 ```bash
 git submodule update --init --recursive   # once, if not cloned with --recursive
-cmake -B build -S .
+tools/build-stack-static.sh BACnetProfileExample-B-LD-CPP   # from the series root
+cmake -B build -S . -DCAS_BACNET_STACK_LINK=STATIC
 cmake --build build --config Release
 ```
 
-The first build compiles the whole stack (~600 files) and takes a few minutes;
-later incremental builds are fast. Use `-D CAS_STACK_DIR=...` only if your stack
-lives outside the bundled submodule.
+The stack library build compiles the whole stack (~600 files) once and takes a
+few minutes; the example itself then builds in seconds, and later incremental
+rebuilds are fast. Use `-D CAS_STACK_DIR=...` only if your stack lives outside
+the bundled submodule. The adapter also offers a SOURCE mode (compiles the
+stack straight into the executable, no library build); this example builds and
+ships STATIC only.
 
 ## Run
 
@@ -46,15 +53,15 @@ commanded over BACnet, not from the keyboard.
 ## The stack pin is not optional here
 
 This example **requires** a stack containing the `Lighting_Command` typed adapters
-([PR #240](https://github.com/chipkin/cas-bacnet-stack/pull/240)); the submodule is
-pinned to `56866997` on `feat/constructed-property-adapters-6x`. Without them,
+(`BACnetStack_RegisterCallbackGetPropertyLightingCommand` /
+`...SetPropertyLightingCommand`), present at the pinned commit
+(`submodules/cas-bacnet-stack` @ `abd4cee1`, `6.x`). Without them,
 `Lighting_Command` - a **required** property of the object that *defines* this
 profile - cannot be served at all: the customer DLL has no constructed-property
 pathway and the read hits `Unsupported datatype for callbacks`.
 
-**Re-pin to the merge commit on `6.x` once PR #240 lands.** Do not "fix" a build
-failure here by removing `Lighting_Command`; that would make the example
-non-conformant.
+Do not "fix" a build failure against an older pin by removing `Lighting_Command`;
+that would make the example non-conformant. Re-pin forward instead.
 
 ## Conventions
 
