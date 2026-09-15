@@ -12,6 +12,21 @@ entry here, and must then be re-copied into **every** example in the series.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the folder adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-09-15
+
+### Added
+
+- `KeyCommand::DemoAdvance` (key `s` / `S`), wired in `PollKey()` on both the
+  Windows (`_getch`) and POSIX (raw-terminal `read`) code paths. Non-breaking,
+  purely additive: existing `switch (CASExampleHelper::PollKey())` call sites
+  with a `default:` case (every current example) build unchanged.
+- Claimed in the series-wide `docs/menu-keys.md`: "Advance the demo Schedule to
+  its next `Weekly_Schedule` time-value immediately, bypassing the wall-clock
+  wait, so a Schedule-driven write can be demonstrated on demand." First
+  consumer: `BACnetProfileExample-B-AAC-CPP`'s SCHED-I-B demo (Wave 1); any
+  later example with a Schedule-driven demo reuses this same key rather than
+  claiming a new one.
+
 ## [2.0.0] - 2026-09-09
 
 ### Changed — BREAKING, required by the CAS BACnet Stack interface update

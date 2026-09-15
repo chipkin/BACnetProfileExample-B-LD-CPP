@@ -158,7 +158,7 @@ static const uint32_t LIGHTING_IN_PROGRESS_RAMP_ACTIVE = 2;
 // 1. Example + device configuration
 // -----------------------------------------------------------------------------
 static const char* APP_NAME = "BACnet B-LD (Lighting Device) Example - C++";
-static const char* APP_VERSION = "1.0.0";
+static const char* APP_VERSION = "1.1.0";
 
 // The device instance. BACnet requires this to be configurable, so it defaults
 // to 389016 and can be overridden on the command line with --deviceID.

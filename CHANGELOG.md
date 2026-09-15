@@ -5,6 +5,51 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - unreleased
+
+### Changed — 6.x re-pin, STATIC link, F-TIMESYNC fixes
+
+- **Stack re-pinned to `6.x` @ `abd4cee1` (reports itself as 6.0.21)**, up from
+  the stale `756371c1` (v5.3.4-634) this repo had drifted to.
+- **Links the CAS BACnet Stack as a prebuilt STATIC library**
+  (`CAS_BACNET_STACK_LINK=STATIC`, built by `tools/build-stack-static.sh`)
+  instead of compiling the stack from `source/`. `CMakeLists.txt`, the README
+  "Link mode" section and `AGENTS.md` now describe STATIC only.
+- **`common/` synced verbatim to v2.1.0** from `BACnetProfileExample-B-SS-CPP`
+  (not bumped further).
+- **API changes at this pin, fixed:**
+  - Every `CallbackGetProperty*` typedef (`Real`, `Enumerated`,
+    `UnsignedInteger`, `CharacterString`, `Bool`, `OctetString` -
+    `LightingCommand` was already known about) gained a trailing
+    `uint32_t* errorCode` parameter. All six implementations updated;
+    `errorCode` is deliberately left unset on every path (none of them has an
+    error condition to report).
+  - `BACnetStack_AddNetworkPortObjectWithNetworkNumber` renamed to
+    `BACnetStack_AddNetworkPortObject` (identical parameters). One call site
+    updated.
+- **Local_Date / Local_Time are now actually served** (`GetPropertyDate` /
+  `GetPropertyTime`, backed by a new `g_syncedDateTime`). Previously these two
+  required Device properties were not served at all and a ReadProperty of
+  either failed `value-not-initialized` - confirmed by wire test. `SetSystemTime`
+  now stores the TimeSynchronization value into `g_syncedDateTime` instead of
+  only printing it, so a subsequent Local_Date/Local_Time read genuinely
+  reflects the last synced time (verified by wire test: sent
+  `2026-09-15 12:34:56`, read back `Local_Date` = `2026-9-15`, `Local_Time` =
+  `12:34:56.00`). `g_syncedDateTime` is seeded from the host clock at start-up
+  so a read before any sync also succeeds.
+- **UTCTimeSynchronization confirmed NOT accepted, by design and by wire test**:
+  this example enables only `SERVICE_TIME_SYNCHRONIZATION` (the profile allows
+  DM-TS-B *or* DM-UTC-B, not both). A UTCTimeSynchronization request against a
+  running instance is rejected by the stack itself
+  (`Services is not supported service=[9]`) before reaching the application.
+- Tagged the `Lighting_Command` and `TimeSynchronization` callback sections
+  `F-LIGHT` / `F-TIMESYNC` as this wave's canonical implementations for later
+  series repos to copy.
+- README/AGENTS.md: removed stale "requires the not-yet-landed PR #240 /
+  pinned to a feature branch" framing (that PR landed long ago); added the
+  generated `## Objects and properties` and `## The BACnet profile example
+  series` sections and a `## Footprint` placeholder (filled at release).
+
 ## [1.0.0] - unreleased
 
 > Not tagged yet: this repository has no tags at all. `release.yml` publishes binaries on a `v*.*.*`

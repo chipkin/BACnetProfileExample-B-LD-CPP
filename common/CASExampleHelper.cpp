@@ -492,6 +492,7 @@ KeyCommand PollKey() {
     }
     if (c == 'h' || c == 'H') return KeyCommand::Help;
     if (c == 'q' || c == 'Q') return KeyCommand::Quit;
+    if (c == 's' || c == 'S') return KeyCommand::DemoAdvance;
     return KeyCommand::None;
 #else
     EnableRawInput();
@@ -507,6 +508,7 @@ KeyCommand PollKey() {
     }
     if (buf[0] == 'h' || buf[0] == 'H') return KeyCommand::Help;
     if (buf[0] == 'q' || buf[0] == 'Q') return KeyCommand::Quit;
+    if (buf[0] == 's' || buf[0] == 'S') return KeyCommand::DemoAdvance;
     return KeyCommand::None;
 #endif
 }
