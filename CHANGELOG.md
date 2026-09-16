@@ -5,6 +5,50 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed — README/TUTORIAL/PICS restructure, SOURCE-mode build
+
+- **Split the README** into three documents, matching the shape already applied
+  to `BACnetProfileExample-B-SS-CPP`: `README.md` now covers only this example
+  (intro, BIBBs/services/objects, the two ways to drive a light, build, run,
+  verify, footprint, series table, references); the long-form "extending the
+  example" / "who serves what" / conformance-review material moved to the new
+  `TUTORIAL.md`; and a new `docs/PICS.md` carries the ANSI/ASHRAE 135 Annex A
+  conformance statement (product description, BIBBs, services, segmentation,
+  object types, data link, device address binding, networking, character sets,
+  the generated objects-and-properties table, references).
+- **`docs/objects.json` gained a `Device` entry** (previously the generated
+  tables omitted the Device object entirely). Regenerated
+  `docs/PICS.md`'s objects-and-properties block
+  (`python tools/gen-objects-properties.py BACnetProfileExample-B-LD-CPP`) -
+  zero ⚠ rows.
+- **Build switched from a prebuilt STATIC library to the adapter's default
+  SOURCE mode**: `cmake -B build -S .` / `cmake --build build --config Release`
+  now compiles the stack straight into the executable, with no
+  `tools/build-stack-static.sh` pre-step and no `-DCAS_BACNET_STACK_LINK=STATIC`
+  flag. `CMakeLists.txt`'s header comment, `AGENTS.md`, and
+  `.github/workflows/release.yml` (link-mode assertion, metrics `link_mode`,
+  no more static-library cache/build steps or matrix `lib:` entries, packaged
+  artifact now includes `TUTORIAL.md` and `docs/PICS.md`) all updated to match.
+  The v1.1.0 footprint numbers in the README were measured from a STATIC build;
+  the table now says so and the next release refreshes them from the
+  SOURCE-mode build.
+- **`main.cpp`**: absorbed the README's old "Before you ship" per-field
+  guidance into comments next to the `CHANGE ALL OF THIS BEFORE YOU SHIP`
+  constants (in particular the `DEVICE_NAME`/`Object_Name`-uniqueness warning,
+  and notes on `MODEL_NAME`, `DEVICE_DESCRIPTION`,
+  `FIRMWARE_REVISION`/`APPLICATION_SOFTWARE_VERSION`). No behavioural change.
+- **Documented a real, previously-unrecorded defect**: `Local_Date` and
+  `Local_Time` are optional Device properties served by `GetPropertyDate` /
+  `GetPropertyTime`, but neither is ever turned on with
+  `BACnetStack_SetPropertyEnabled` - so `IsPropertyEnabled` never finds them
+  enabled and a `ReadProperty` of either fails `unknown-property` before either
+  callback is reached, contrary to this file's own v1.1.0 entry above claiming
+  a successful wire test. See `TUTORIAL.md`'s "Known limitation" section and
+  `docs/objects.json`'s Device note. Not fixed in this change (out of scope for
+  a docs restructure); the missing `SetPropertyEnabled` calls are the fix.
+
 ## [1.1.0] - 2026-09-15
 
 ### Changed — 6.x re-pin, STATIC link, F-TIMESYNC fixes
