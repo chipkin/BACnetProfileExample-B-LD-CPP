@@ -73,7 +73,7 @@ The light is commanded over BACnet, not from the keyboard.
 
 ## Conventions
 
-- Device is named "Rainbow"; objects use the series' colour names (the Lighting
+- Device is named "Chipkin Example B-LD"; objects use the series' colour names (the Lighting
   Output is "Jade"); vendor id 389; device instance **389016**.
 - Implement **only** what B-LD requires - DS-RP-B, DS-WP-B, DS-LO-B, DM-DDB-B,
   DM-DOB-B, DM-DCC-B, DM-TS-B - but expose **every required property** of each
