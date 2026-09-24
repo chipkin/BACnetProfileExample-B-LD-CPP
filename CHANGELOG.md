@@ -5,7 +5,42 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - unreleased
+
+### Changed
+
+- **Device renamed from the series' colour placeholder "Rainbow" to "Chipkin
+  Example B-LD"** so devices from different examples in the series are
+  distinguishable from each other on the same BACnet network - every example
+  previously announced the identical Object_Name "Rainbow", which made two
+  examples on one subnet indistinguishable by name. Sub-object names (Analog
+  Input 1 "Bronze", etc.) are unchanged - only the Device object's name
+  changed. `docs/colour-table.md` (series root) updated to match. APP_VERSION
+  bumped 1.1.1 -> 1.1.2.
+
 ## [Unreleased]
+
+### Fixed
+
+- **`Application_Software_Version` (12) and `Firmware_Revision` (44) were
+  hardcoded and stale** - both served from separate `APPLICATION_SOFTWARE_VERSION`
+  / `FIRMWARE_REVISION` constants pinned to the literal `"1.0.0"`, unrelated to
+  `APP_VERSION` (already `1.1.0`+) or to the linked CAS BACnet Stack build.
+  Fixed: `Application_Software_Version` now reads `APP_VERSION` directly (one
+  source of truth, can't drift from `--version`'s own banner again).
+  `Firmware_Revision` is now built at runtime from the CAS BACnet Stack's own
+  `BACnetStack_GetAPIMajorVersion()`/`GetAPIMinorVersion()`/
+  `GetAPIPatchVersion()`/`GetAPIBuildVersion()` (the same 4 calls
+  `common/CASExampleHelper.cpp`'s `PrintVersion()` already uses for the startup
+  banner), populated once right after `LoadBACnetFunctions()` succeeds, into a
+  new `static std::string g_firmwareRevision`. The old `FIRMWARE_REVISION` and
+  `APPLICATION_SOFTWARE_VERSION` constants are removed entirely. Same fix
+  already applied to `BACnetProfileExample-B-SCHUB-CPP`; matched its shape
+  here. `APP_VERSION` bumped to `1.1.1` per this series' standing rebuild
+  convention. Verified with a real ReadProperty (bacpypes3) against the
+  running device: `Application_Software_Version = "1.1.1"`,
+  `Firmware_Revision = "6.0.21.0"` - both now match the actual running
+  build instead of a hardcoded `"1.0.0"` string.
 
 ### Changed — README/TUTORIAL/PICS restructure, SOURCE-mode build
 
