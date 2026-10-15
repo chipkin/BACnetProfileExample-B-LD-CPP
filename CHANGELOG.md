@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - unreleased
+
+### Changed
+
+- **Stack Pin moves to `6.x` @ `64b2cfac5` (6.0.23)** from `6.x` @ `abd4cee1`
+  (6.0.21), per the series rule that a pin moves to the latest `6.x` whenever an
+  example is updated. No `main.cpp` change was needed (only APP_VERSION 1.1.2 ->
+  1.1.3 and a comment).
+- **Protocol_Revision 24 -> 30** (the stack's default at the new pin).
+- **Segmentation is now supported** (`segmented-both`), by the stack: its
+  customer build compiles segmentation in from this pin (stack #2992).
+  `docs/PICS.md` section 5 updated and the objects block regenerated.
+- **`common/` 3.0.0 -> 3.3.0**, copied verbatim from B-SS-CPP `b640a81`. 3.1.0
+  and 3.3.0 only add keys this example does not use; 3.2.0 sends a broadcast the
+  stack hands over with no address instead of dropping it.
+- README, TUTORIAL, AGENTS.md and PICS version lines: stack 6.0.23, `common/`
+  3.3.0, Protocol_Revision 30. README profile table re-synced.
+
+### Fixed
+
+- **The docs no longer say the light fades.** The example has no fade engine:
+  every Lighting_Command completes at once, `Tracking_Value` always equals
+  `Present_Value`, and `In_Progress` is always `idle` (the code always said so).
+  The README "Verify" steps said the console showed the light "fading over 3000
+  ms" and implied a 3-second fade; they now say the level changes at once and the
+  log line only names the fade time the example resolved. README, TUTORIAL,
+  AGENTS.md and PICS say this plainly. A real fade engine is phase-2 work.
+
+### Added
+
+- **Wire Tests** (`tests/`, README "Wire Tests"): `tests/discovery_test.py`, the
+  series' discovery test from B-SS-CPP `da3e96f` with this example's object list
+  as its control. It does Who-Is, reads the Device's `Object_List`, then every
+  object's `Property_List` and every listed property, and fails on any Error,
+  Reject, Abort or silence. `tests/run_wire_tests.py` runs it; CI runs it on
+  Linux after the smoke test. Result: 15/15 on Windows (STATIC) and Linux
+  (SOURCE), 138 reads, all values.
+- `wiretest/` 0.5.0, the series' shared Wiretest Harness, vendored verbatim from
+  B-BBMD-CPP `75aedd8`.
+
 ## [1.1.2] - unreleased
 
 ### Changed

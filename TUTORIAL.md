@@ -173,8 +173,8 @@ consistent, and that is per spec:
 
 | Property | Value here | Notes |
 |---|---|---|
-| `Tracking_Value` | live | What the light **is**, vs `Present_Value` = what it was **told** to be |
-| `In_Progress` | `idle` | `fadeActive` / `rampActive` on real hardware mid-move |
+| `Tracking_Value` | = `Present_Value` | What the light **is**, vs `Present_Value` = what it was **told** to be. This example has no fade engine, so the two are always equal |
+| `In_Progress` | `idle` (always) | `fadeActive` / `rampActive` on real hardware mid-move; never here, since every command completes at once |
 | `Blink_Warn_Enable` | `true` | The "lights are about to go out" flash |
 | `Egress_Time` | 30 | **seconds** |
 | `Egress_Active` | `false` | True only while the egress timer runs |
@@ -195,7 +195,7 @@ property?" For the Lighting Output "Jade":
 | Property | Served by | How |
 |---|---|---|
 | `Object_Identifier`, `Object_Type`, `Object_List`, `Property_List`, `Status_Flags` | **stack** | generated from the object you added |
-| `Current_Command_Priority` | **stack** | computed from the Priority_Array (required at Protocol_Revision 24) |
+| `Current_Command_Priority` | **stack** | computed from the Priority_Array (required at Protocol_Revision 30) |
 | `Event_State` | **stack**, sort of | no intrinsic alarming here, so nothing serves it - it reads `normal` only because `normal` is the enumeration's zero value and the stack substitutes a datatype default. Correct by coincidence, not design. |
 | `Present_Value` | **you (write) / stack (read)** | `SetPropertyReal` accepts a direct write of the REAL level (0-100%); on read the **stack computes** `Present_Value` from the Priority_Array slots that `GetPropertyReal` serves (highest non-null slot, or `Relinquish_Default`) |
 | `Object_Name` | **you** | `GetPropertyCharString` |

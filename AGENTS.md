@@ -54,7 +54,7 @@ commands above.
 This example **requires** a stack containing the `Lighting_Command` typed
 adapters (`BACnetStack_RegisterCallbackGetPropertyLightingCommand` /
 `...SetPropertyLightingCommand`), present at the pinned commit
-(`submodules/cas-bacnet-stack` @ `abd4cee1`, `6.x`). Without them,
+(`submodules/cas-bacnet-stack` @ `64b2cfac5`, `6.x`). Without them,
 `Lighting_Command` - a **required** property of the object that *defines* this
 profile - cannot be served at all: the read hits `Unsupported datatype for
 callbacks`. Do not "fix" a build failure against an older pin by removing
@@ -77,7 +77,7 @@ The light is commanded over BACnet, not from the keyboard.
   Output is "Jade"); vendor id 389; device instance **389016**.
 - Implement **only** what B-LD requires - DS-RP-B, DS-WP-B, DS-LO-B, DM-DDB-B,
   DM-DOB-B, DM-DCC-B, DM-TS-B - but expose **every required property** of each
-  object for Protocol_Revision 24.
+  object for Protocol_Revision 30.
 - The profile allows "DS-BLO-B **or** DS-LO-B" and "DM-TS-B **or** DM-UTC-B". Only
   one of each is required; this example implements the Lighting Output and local
   TimeSync. **Do not add the other** - that is not what a profile example is for.
@@ -125,20 +125,25 @@ calls in `main()`.
 
 ## How to verify a change
 
-There are no unit tests; verification is behavioural:
+The Wire Tests in `tests/` automate the discovery half of this (README "Wire
+Tests"): `python3 tests/run_wire_tests.py --exe build/BACnetExampleBLD`. Run them
+after any change. Beyond them, verification is behavioural:
 
 1. Build, then run one instance on a clear UDP port. If any `AddObject` or the
    `SetPropertyWritable(Lighting_Command)` call failed, the process exits non-zero
    - that alone catches a stack pinned without the adapters.
 2. With a BACnet client, **Who-Is** -> confirm **I-Am** from device 389016.
 3. **ReadProperty** every required property of every object; confirm
-   `Protocol_Revision` is 24 and `Object_List` lists all nine objects. Pay
+   `Protocol_Revision` is 30 and `Object_List` lists all nine objects. Pay
    attention to the Lighting Output's unusual ones: `Tracking_Value`,
    `In_Progress`, `Blink_Warn_Enable`, `Egress_Time`, `Egress_Active`,
    `Default_Fade_Time`, `Default_Ramp_Rate`, `Default_Step_Increment`,
    `Lighting_Command_Default_Priority`.
 4. **WriteProperty** `Lighting_Command` = `{fadeTo, target-level 75.0, fade-time
    3000}`, then read `Present_Value` (75.0) and `Lighting_Command` (reads back).
+   The level is there at once: this example has no fade engine, `Tracking_Value`
+   always equals `Present_Value` and `In_Progress` is always `idle`. Do not
+   document a fade over time until the code does one.
 5. **The regression that matters:** write `{fadeTo, target-level 50.0}` with **no
    fade-time** and confirm the log shows **3000 ms** (`Default_Fade_Time`), not 0.
 6. Write `target-level` = 150.0 -> confirm `value-out-of-range`.

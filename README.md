@@ -8,6 +8,14 @@ It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty** and
 commandable **Lighting Output** through both a `Priority_Array` and the
 constructed `Lighting_Command` property.
 
+> **No dimming engine.** There is no light behind this example, and it does not
+> simulate one moving. Every command completes **at once**: a `fadeTo` or
+> `rampTo` puts `Present_Value` straight at the target, `Tracking_Value` always
+> equals `Present_Value`, and `In_Progress` always reads `idle`. The example
+> accepts, resolves and logs the fade time, ramp rate and step increment, but it
+> does not act them out over time. A real device starts its dimmer here and
+> reports the level it actually has.
+
 **[Download a prebuilt binary](https://github.com/chipkin/BACnetProfileExample-B-LD-CPP/releases)**
 (Windows and Linux x64) - or build it yourself, see [Build](#build) below.
 
@@ -16,9 +24,9 @@ constructed `Lighting_Command` property.
 - **[docs/PICS.md](docs/PICS.md)** - the Protocol Implementation Conformance
   Statement: every object, every property, and who answers it.
 
-> **Versions:** this document describes **example v1.1.0**, built and verified
-> against **CAS BACnet Stack 6.0.21** (`6.x` @ `abd4cee1`), at
-> **Protocol_Revision 24**, with the vendored `common/` helper at **v2.5.0**.
+> **Versions:** this document describes **example v1.1.3**, built and verified
+> against **CAS BACnet Stack 6.0.23** (`6.x` @ `64b2cfac5`), at
+> **Protocol_Revision 30**, with the vendored `common/` helper at **v3.3.0**.
 > Running the example prints all three - if what it prints disagrees with this
 > line, trust the program and check `CHANGELOG.md`.
 
@@ -89,7 +97,9 @@ parameters that operation needs:
 | `priority` | Unsigned 1-16 | optional |
 
 It tells the light **how** to get somewhere, not just where: *"fade to 75 % over
-3 seconds"* rather than *"be 75 % now"*.
+3 seconds"* rather than *"be 75 % now"*. (This example records the "how" and
+logs it, but it has no fade engine: the level changes at once. See the note at
+the top.)
 
 > **Which priority does a `Lighting_Command` command at?** Its **embedded**
 > `priority` field - *not* the WriteProperty service priority you sent the request
@@ -114,6 +124,8 @@ This is a **self-contained** project. It ships:
 - `common/` - the shared helper (UDP, callbacks, CLI, keyboard) vendored in.
 - `CMakeLists.txt` - the build, the same on Windows, Linux, and macOS.
 - `docs/PICS.md` - the conformance statement.
+- `tests/` - the Wire Tests (see [Wire Tests](#wire-tests)), and `wiretest/`, the
+  series' shared Python harness they are written against (vendored, like `common/`).
 - `submodules/cas-bacnet-stack/` - the **CAS BACnet Stack as a git submodule**
   (private; requires a license - see below). Its sources are compiled into the
   executable, so there is no library or DLL to build, ship, or install.
@@ -188,11 +200,11 @@ CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 Expected output:
 
 ```
-BACnet B-LD (Lighting Device) Example - C++ v1.1.0
-CAS BACnet Stack version: 6.0.21.0
-Common helper (common/) version: 2.5.0
+BACnet B-LD (Lighting Device) Example - C++ v1.1.3
+CAS BACnet Stack version: 6.0.23.0
+Common helper (common/) version: 3.3.0
 FYI: Listening for BACnet/IP on UDP port 47808 (Network Port 1).
-TX 21 bytes to 192.168.3.255:47808 (broadcast) (Network Port 1)
+TX 21 bytes to 192.168.3.255:47808 (broadcast) (Network Port 1) - Unconfirmed: I-Am
 FYI: Device 389016 ("Chipkin Example B-LD") ready. Vendor ID 389. Press 'h' for help.
 FYI: Lighting Output 1 (Jade) starts at 0.0% (off). WriteProperty its
      Lighting_Command to fade/ramp/step it, or its Present_Value to set a level.
@@ -244,11 +256,14 @@ Use a BACnet client such as the
 2. **ReadProperty** `Lighting Output 1` `Present_Value` -> `0.0` (nothing has
    commanded it, so it rests at `Relinquish_Default` - the light is off).
 3. **WriteProperty** `Lighting_Command` = `{operation: fadeTo, target-level: 75.0,
-   fade-time: 3000}` -> the console logs the fade and `Present_Value` reads `75.0`.
+   fade-time: 3000}` -> the console logs `fadeTo 75.0% over 3000 ms` and
+   `Present_Value` (and `Tracking_Value`) read `75.0` straight away: the example
+   has no fade engine, so the level does not move over the 3 seconds.
 4. **ReadProperty** `Lighting_Command` -> the command you just sent, read back.
 5. **WriteProperty** `Lighting_Command` = `{operation: fadeTo, target-level: 50.0}`
-   - **no fade-time**. The console shows it fading over **3000 ms**
-   (`Default_Fade_Time`), not 0. That is the `use*` flag doing its job.
+   - **no fade-time**. The console line names **3000 ms** (`Default_Fade_Time`),
+   not 0: the fade time the example resolved for the command. That is the `use*`
+   flag doing its job. The level still changes at once.
 6. **WriteProperty** `Present_Value` = `20.0` at priority 8 -> the light goes to
    20 % directly, no fade. Both paths drive the same `Priority_Array`.
 7. **TimeSynchronization** -> the console logs the time the device would set.
@@ -256,11 +271,28 @@ Use a BACnet client such as the
 For a property-by-property review against the conformance statement, see
 [TUTORIAL.md](TUTORIAL.md).
 
+## Wire Tests
+
+Discovery, automated: a Python BACnet client drives the running example over
+BACnet/IP from outside it, the way a client discovers a device - Who-Is, the
+Device's `Object_List`, then for every object its `Property_List` and a
+ReadProperty of every property it lists. Every read must come back as a value; an
+Error, Reject or Abort fails the run. Python 3 standard library only:
+
+```bash
+python3 tests/run_wire_tests.py --exe build/BACnetExampleBLD          # Linux/macOS
+python tests\run_wire_tests.py --exe build\Release\BACnetExampleBLD.exe   # Windows
+```
+
+It ends with `ALL WIRE TESTS PASSED` (exit 0). CI runs it on Linux after the
+smoke test. [tests/README.md](tests/README.md) says what each check proves. It
+does not test the Lighting Output's behaviour (there is no fade to test yet).
+
 
 ## The BACnet profile example series
 
 <!-- PROFILE-TABLE:BEGIN (generated from cas-bacnet-stack-examples/docs/profile-table.md - do not edit here) -->
-The CAS BACnet Stack supports every standardized device profile in ASHRAE 135-2024 Annex L, and there is one example repository per profile. Pick the profile your device claims, then the language you build in. "Ask" means the example hasn't been built yet for that language - [contact Chipkin](https://store.chipkin.com/contact-us) if you need one.
+There is one example repository per standardized device profile in ASHRAE 135-2024 Annex L. An example marked ⛔ is blocked: the stack cannot yet perform that profile's function through its customer interface, and the example's README says what it does today. Pick the profile your device claims, then the language you build in. "Ask" means the example hasn't been built yet for that language - [contact Chipkin](https://store.chipkin.com/contact-us) if you need one.
 
 ### Controllers (Annex L.4)
 
@@ -305,7 +337,7 @@ The CAS BACnet Stack supports every standardized device profile in ASHRAE 135-20
 
 | Profile | C++ | Node.js | C# | Rust | Python | Go |
 |---|---|---|---|---|---|---|
-| **B-AS** Authorization Server | [B-AS-CPP](https://github.com/chipkin/BACnetProfileExample-B-AS-CPP) | Ask | Ask | Ask | Ask | Ask |
+| **B-AS** Authorization Server | [B-AS-CPP](https://github.com/chipkin/BACnetProfileExample-B-AS-CPP) ⛔ blocked on [stack #2043](https://github.com/chipkin/cas-bacnet-stack/issues/2043) | Ask | Ask | Ask | Ask | Ask |
 
 ### Miscellaneous (Annex L.7, combinable with any one family)
 
@@ -313,10 +345,10 @@ The CAS BACnet Stack supports every standardized device profile in ASHRAE 135-20
 |---|---|---|---|---|---|---|
 | **B-BBMD** Broadcast Management Device | [B-BBMD-CPP](https://github.com/chipkin/BACnetProfileExample-B-BBMD-CPP) | Ask | Ask | Ask | Ask | Ask |
 | **B-ACDC** Access Control Door Controller | [B-ACDC-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACDC-CPP) | Ask | Ask | Ask | Ask | Ask |
-| **B-ACCR** Access Control Credential Reader | [B-ACCR-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACCR-CPP) | Ask | Ask | Ask | Ask | Ask |
+| **B-ACCR** Access Control Credential Reader | [B-ACCR-CPP](https://github.com/chipkin/BACnetProfileExample-B-ACCR-CPP) ⛔ blocked on [stack #3934](https://github.com/chipkin/cas-bacnet-stack/issues/3934) | Ask | Ask | Ask | Ask | Ask |
 | **B-RTR** Router | [B-RTR-CPP](https://github.com/chipkin/BACnetProfileExample-B-RTR-CPP) | Ask | Ask | Ask | Ask | Ask |
 | **B-GW** Gateway | [B-GW-CPP](https://github.com/chipkin/BACnetProfileExample-B-GW-CPP) | Ask | Ask | Ask | Ask | Ask |
-| **B-DAP** Device Address Proxy | [B-DAP-CPP](https://github.com/chipkin/BACnetProfileExample-B-DAP-CPP) | Ask | Ask | Ask | Ask | Ask |
+| **B-DAP** Device Address Proxy | [B-DAP-CPP](https://github.com/chipkin/BACnetProfileExample-B-DAP-CPP) ⛔ blocked on [stack #2032](https://github.com/chipkin/cas-bacnet-stack/issues/2032) | Ask | Ask | Ask | Ask | Ask |
 | **B-SCHUB** BACnet/SC Hub | [B-SCHUB-CPP](https://github.com/chipkin/BACnetProfileExample-B-SCHUB-CPP) | Ask | Ask | Ask | Ask | Ask |
 | **B-GENERAL** General device (Annex L.8) | *(satisfied by every example above)* | — | — | — | — | — |
 
@@ -344,7 +376,7 @@ Client-side profiles.
 | **B-EWS** Elevator Workstation | planned | — | — | — | — | — |
 | **B-AEWS** Advanced Elevator Workstation | planned | — | — | — | — | — |
 
-🚧 = in progress. "Ask" = not yet built for that language; contact Chipkin if you need it. Profile definitions: ANSI/ASHRAE 135-2024 Annex L. BIBB definitions: Annex K. Get the stack: <https://store.chipkin.com/services/stacks/bacnet-stack>.
+🚧 = in progress. ⛔ = Blocked Example (blocked on the named stack gap). "Ask" = not yet built for that language; contact Chipkin if you need it. Profile definitions: ANSI/ASHRAE 135-2024 Annex L. BIBB definitions: Annex K. Get the stack: <https://store.chipkin.com/services/stacks/bacnet-stack>.
 <!-- PROFILE-TABLE:END -->
 
 ## References
