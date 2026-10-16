@@ -32,7 +32,8 @@ import time
 
 import ld_setup as setup
 from ld_setup import FADE_ACTIVE, FADE_TO, IDLE, SLACK, STOP, acked, application_null, application_real, \
-    describe, near, wait_until
+    describe, near
+from wiretest import sleep_until
 import wiretest
 from wiretest import record
 
@@ -48,7 +49,7 @@ def main():
         # --- stop mid-fade holds the level --------------------------------------
         answer = light.command(FADE_TO, target_level=100.0, fade_time=5000, priority=16)
         written_at = time.monotonic()
-        wait_until(written_at, 1.0)
+        sleep_until(written_at, 1.0)
         record("stop: a 5 s fadeTo 100 @ 16 is FADE_ACTIVE at 1.0 s",
                acked(answer) and light.value(setup.PROPERTY_IN_PROGRESS) == FADE_ACTIVE)
         answer = light.command(STOP, priority=12)
@@ -65,7 +66,7 @@ def main():
                near(light.value(setup.PROPERTY_PRIORITY_ARRAY, 16), stopped_level, 0.5),
                f"read In_Progress {in_progress}, Present_Value {present_value}, "
                f"Priority_Array[16] {light.value(setup.PROPERTY_PRIORITY_ARRAY, 16)}")
-        wait_until(written_at, 5.0 + SLACK)
+        sleep_until(written_at, 5.0 + SLACK)
         held = light.value(setup.PROPERTY_TRACKING_VALUE)
         record("stop: past the fade's end the level is still held where it stopped",
                near(held, stopped_level, 0.5), f"read {held}, stopped at {stopped_level}")
@@ -74,7 +75,7 @@ def main():
         record("reset: relinquished, off and idle", setup.reset(light))
         light.command(FADE_TO, target_level=80.0, fade_time=1500, priority=16)
         written_at = time.monotonic()
-        wait_until(written_at, 0.5)
+        sleep_until(written_at, 0.5)
         answer = light.write(setup.PROPERTY_PRESENT_VALUE, application_real(30.0), priority=8)
         present_value, tracking_value, in_progress = light.state()
         record("override: Present_Value 30 @ 8 mid-fade halts the fade @ 16 - In_Progress IDLE, "
@@ -86,7 +87,7 @@ def main():
                "Current_Command_Priority is 8",
                near(light.value(setup.PROPERTY_PRIORITY_ARRAY, 16), 80.0, 0.01) and
                light.value(setup.PROPERTY_CURRENT_COMMAND_PRIORITY) == 8)
-        wait_until(written_at, 1.5 + SLACK)
+        sleep_until(written_at, 1.5 + SLACK)
         record("override: the halted fade does not move the light afterwards - Tracking_Value still 30",
                near(light.value(setup.PROPERTY_TRACKING_VALUE), 30.0, 0.01),
                f"read {light.value(setup.PROPERTY_TRACKING_VALUE)}")
@@ -99,12 +100,12 @@ def main():
         record("reset: relinquished, off and idle", setup.reset(light))
         light.command(FADE_TO, target_level=90.0, fade_time=1500, priority=16)
         written_at = time.monotonic()
-        wait_until(written_at, 0.4)
+        sleep_until(written_at, 0.4)
         answer = light.write(setup.PROPERTY_PRESENT_VALUE, application_real(25.0), priority=16)
         record("same priority: Present_Value 25 @ 16 mid-fade @ 16 halts it - In_Progress IDLE, "
                "Present_Value and Tracking_Value 25 at once (cl. 12.54.6.1 \"implicitly halted\")",
                acked(answer) and light.state() == (25.0, 25.0, IDLE), f"read {light.state()}")
-        wait_until(written_at, 1.5 + SLACK)
+        sleep_until(written_at, 1.5 + SLACK)
         record("same priority: and the halted fade never takes the light to 90 afterwards",
                light.state() == (25.0, 25.0, IDLE), f"read {light.state()}")
 
@@ -112,13 +113,13 @@ def main():
         record("reset: relinquished, off and idle", setup.reset(light))
         light.command(FADE_TO, target_level=60.0, fade_time=2500, priority=8)
         written_at = time.monotonic()
-        wait_until(written_at, 0.3)
+        sleep_until(written_at, 0.3)
         answer = light.write(setup.PROPERTY_PRESENT_VALUE, application_real(90.0), priority=12)
         record("lower priority: Present_Value 90 @ 12 mid-fade @ 8 is stored but the fade keeps running",
                acked(answer) and light.value(setup.PROPERTY_IN_PROGRESS) == FADE_ACTIVE and
                near(light.value(setup.PROPERTY_PRIORITY_ARRAY, 12), 90.0, 0.01) and
                near(light.value(setup.PROPERTY_PRESENT_VALUE), 60.0, 0.01))
-        wait_until(written_at, 2.5 + SLACK)
+        sleep_until(written_at, 2.5 + SLACK)
         record("lower priority: the fade @ 8 arrives at 60 regardless",
                light.state() == (60.0, 60.0, IDLE), f"read {light.state()}")
 

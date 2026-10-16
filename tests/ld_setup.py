@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: CC0-1.0
 # Public-domain example code (CC0) - see ../LICENSE.
-"""What B-LD's Wire Tests share: this lighting device's numbers, starting it, and a
-BACnetLightingCommand encoder.
+"""What B-LD's Wire Tests share: this lighting device's numbers, and starting it.
 
 The setup, all on one host:
 
@@ -14,11 +13,11 @@ supervisor (B-LS), a Schedule in a controller, a wall-station gateway, an operat
 workstation. It writes Lighting_Command and Present_Value and reads the light back
 over the wire exactly as those would; nothing reaches into the example any other way.
 
-The generic part - lighting_command(), decode_lighting_command(), sample() and
-Sampler - is written against wiretest only and is proposed for wiretest/ 0.7.0.
+The BACnetLightingCommand encoder and decoder, sample() and monotonic() are wiretest 0.7.0's
+(wiretest.services.lighting_command / decode_lighting_command, wiretest.sample,
+wiretest.monotonic); this file keeps what is about this light.
 """
 import argparse
-import struct
 import sys
 import time
 from pathlib import Path
@@ -75,56 +74,6 @@ SLACK = 0.35        # seconds allowed for the example's tick and the round trip
 LEVEL_TOLERANCE = 1.0   # percent: a sample's timestamp is only known to within one round trip
 
 
-# ----- generic helpers (proposed for wiretest/ 0.7.0) ---------------------------
-
-def context_real(tag, value):
-    """A context-tagged REAL (cl. 20.2.6)."""
-    return bytes([(tag << 4) | 0x08 | 4]) + struct.pack(">f", value)
-
-
-def lighting_command(operation, target_level=None, ramp_rate=None, step_increment=None, fade_time=None,
-                     priority=None):
-    """A BACnetLightingCommand (cl. 21) as the value of a WriteProperty: operation [0],
-    then each optional field given - target-level [1], ramp-rate [2], step-increment [3],
-    fade-time [4], priority [5]."""
-    octets = wiretest.context_enumerated(0, operation)
-    if target_level is not None:
-        octets += context_real(1, target_level)
-    if ramp_rate is not None:
-        octets += context_real(2, ramp_rate)
-    if step_increment is not None:
-        octets += context_real(3, step_increment)
-    if fade_time is not None:
-        octets += wiretest.context_unsigned(4, fade_time)
-    if priority is not None:
-        octets += wiretest.context_unsigned(5, priority)
-    return octets
-
-
-def decode_lighting_command(octets):
-    """A read BACnetLightingCommand as a dict of the fields it carries (operation,
-    target_level, ramp_rate, step_increment, fade_time, priority), or None."""
-    if not octets:
-        return None
-    names = {0: "operation", 1: "target_level", 2: "ramp_rate", 3: "step_increment", 4: "fade_time",
-             5: "priority"}
-    decoded = {}
-    for tag, body in wiretest.context_values(octets):
-        if tag in (1, 2, 3):
-            decoded[names[tag]] = struct.unpack(">f", body)[0]
-        elif tag in names:
-            decoded[names[tag]] = int.from_bytes(body, "big")
-    return decoded
-
-
-def wait_until(start, seconds):
-    """Sleep until `seconds` after the monotonic time `start`."""
-    remaining = start + seconds - time.monotonic()
-    if remaining > 0:
-        time.sleep(remaining)
-
-
-# ----- this example ------------------------------------------------------------
 
 def parser(description):
     arguments = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -145,11 +94,11 @@ class Light:
     one is needed): a lost datagram must not eat a fade's sampling window."""
 
     def __init__(self, args):
-        self.client = wiretest.Client(retries=2)
+        self.client = wiretest.Client(retries=2, timeout=1.0)
         self.port = args.port
 
     def read(self, property_identifier, array_index=None):
-        return self.client.read_property(self.port, *LIGHT, property_identifier, array_index, timeout=1.0)
+        return self.client.read_property(self.port, *LIGHT, property_identifier, array_index)
 
     def value(self, property_identifier, array_index=None):
         """The decoded value (NULL -> None), or 'no answer' / 'error' so a comparison with
@@ -162,12 +111,11 @@ class Light:
         return answer.value
 
     def write(self, property_identifier, value_octets, priority=None):
-        return self.client.write_property(self.port, *LIGHT, property_identifier, value_octets, priority,
-                                          timeout=1.0)
+        return self.client.write_property(self.port, *LIGHT, property_identifier, value_octets, priority)
 
     def command(self, operation, **fields):
         """WriteProperty Lighting_Command."""
-        return self.write(PROPERTY_LIGHTING_COMMAND, lighting_command(operation, **fields))
+        return self.write(PROPERTY_LIGHTING_COMMAND, wiretest.services.lighting_command(operation, **fields))
 
     def state(self):
         """(Present_Value, Tracking_Value, In_Progress)."""
@@ -179,7 +127,7 @@ class Light:
 
 
 def acked(answer):
-    return answer.answered and answer.frame.pdu_type == wiretest.PDU_SIMPLE_ACK
+    return answer.acked
 
 
 def value_out_of_range(answer):
@@ -188,17 +136,6 @@ def value_out_of_range(answer):
 
 def near(value, expected, tolerance=LEVEL_TOLERANCE):
     return isinstance(value, float) and abs(value - expected) <= tolerance
-
-
-def sample(read, seconds, interval=0.1):
-    """Call `read()` every `interval` s for `seconds`; returns what each call returned."""
-    samples = []
-    start = time.monotonic()
-    while time.monotonic() - start < seconds:
-        sent = time.monotonic()
-        samples.append(read())
-        wait_until(sent, interval)
-    return samples
 
 
 def sample_light(light, seconds, interval=0.1, slowest=0.25):
@@ -214,7 +151,7 @@ def sample_light(light, seconds, interval=0.1, slowest=0.25):
         in_progress = light.value(PROPERTY_IN_PROGRESS)
         return (sent + received) / 2, tracking_value, in_progress, time.monotonic(), received - sent
     return [(midpoint, level, state, state_time) for midpoint, level, state, state_time, round_trip
-            in sample(read, seconds, interval) if round_trip <= slowest]
+            in wiretest.sample(read, seconds, interval) if round_trip <= slowest]
 
 
 def reset(light):
@@ -223,15 +160,6 @@ def reset(light):
     for priority in range(1, 17):
         light.write(PROPERTY_PRESENT_VALUE, application_null(), priority=priority)
     return wiretest.wait_until(lambda: light.state() == (0.0, 0.0, IDLE), 2.0)
-
-
-def monotonic(values, rising=True):
-    """True when every value is a number and none moves the wrong way."""
-    if not values or not all(isinstance(value, float) for value in values):
-        return False
-    pairs = zip(values, values[1:])
-    return all(later >= earlier for earlier, later in pairs) if rising else \
-        all(later <= earlier for earlier, later in pairs)
 
 
 def describe(answer):

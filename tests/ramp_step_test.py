@@ -26,7 +26,8 @@ import time
 
 import ld_setup as setup
 from ld_setup import (IDLE, RAMP_ACTIVE, RAMP_TO, SLACK, STEP_DOWN, STEP_OFF, STEP_ON, STEP_UP, acked, describe,
-                      near, wait_until)
+                      near)
+from wiretest import sleep_until
 import wiretest
 from wiretest import record
 
@@ -48,7 +49,7 @@ def ramp(light, target, rate, label, rate_field=True):
     samples = setup.sample_light(light, expected_seconds - 0.2)
     levels = [level for _, level, _, _ in samples]
     record(f"{label}: Tracking_Value moves monotonically toward {target:.0f}%",
-           setup.monotonic(levels, target > start_level),
+           wiretest.monotonic(levels, target > start_level),
            f"samples {[round(level, 1) if isinstance(level, float) else level for level in levels]}")
     # The measured rate: the slope between the first and last part-way samples.
     moving = [(sample_time, level, state, state_time) for sample_time, level, state, state_time in samples if isinstance(level, float)
@@ -64,7 +65,7 @@ def ramp(light, target, rate, label, rate_field=True):
     in_progress = [state for _, _, state, state_time in moving if state_time < written_at + expected_seconds - 0.05]
     record(f"{label}: In_Progress is RAMP_ACTIVE whenever Tracking_Value is part-way",
            in_progress and all(state == RAMP_ACTIVE for state in in_progress), f"read {in_progress}")
-    wait_until(written_at, expected_seconds + SLACK)
+    sleep_until(written_at, expected_seconds + SLACK)
     present_value, tracking_value, in_progress = light.state()
     record(f"{label}: after {expected_seconds:.1f} s it has arrived - Tracking_Value {target:.0f}%, In_Progress IDLE",
            near(tracking_value, target, 0.01) and in_progress == IDLE,

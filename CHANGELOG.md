@@ -62,6 +62,7 @@ against a Python Peer.
   regenerated objects block) and `tests/README.md` rewritten to match.
 - The discovery Wire Test expects the three objects, and the runner's default
   port is 48020.
+- Wire Tests use the shared `wiretest/` 0.7.0: the BACnetLightingCommand encoder / decoder (`wiretest.services`), `context_real`, `sample`, `monotonic` and `sleep_until` (was `ld_setup.wait_until(start, seconds)`) moved there from `tests/ld_setup.py`.
 
 ### Fixed
 

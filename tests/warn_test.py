@@ -35,7 +35,8 @@ import time
 
 import ld_setup as setup
 from ld_setup import (DEFAULT_ON, IDLE, RESTORE_ON, SLACK, STOP, TOGGLE_RESTORE, WARN, WARN_OFF, WARN_RELINQUISH,
-                      acked, application_real, application_unsigned, describe, near, wait_until)
+                      acked, application_real, application_unsigned, describe, near)
+from wiretest import sleep_until
 import wiretest
 from wiretest import record
 
@@ -66,11 +67,11 @@ def main():
         record("warnRelinquish @ 9: accepted, Egress_Active TRUE, the light held at 100%",
                acked(answer) and light.value(setup.PROPERTY_EGRESS_ACTIVE) is True and
                light.state() == (100.0, 100.0, IDLE), f"{describe(answer)}; read {light.state()}")
-        wait_until(written_at, 1.0)
+        sleep_until(written_at, 1.0)
         record("warnRelinquish: part-way through Egress_Time - still 100% @ 9, Egress_Active TRUE",
                light.value(setup.PROPERTY_EGRESS_ACTIVE) is True and
                near(light.value(setup.PROPERTY_PRIORITY_ARRAY, 9), 100.0, 0.01))
-        wait_until(written_at, EGRESS_SECONDS + SLACK)
+        sleep_until(written_at, EGRESS_SECONDS + SLACK)
         record("warnRelinquish: after Egress_Time - Priority_Array[9] NULL, the light off, Egress_Active FALSE",
                light.value(setup.PROPERTY_PRIORITY_ARRAY, 9) is None and light.state() == (0.0, 0.0, IDLE) and
                light.value(setup.PROPERTY_EGRESS_ACTIVE) is False, f"read {light.state()}")
@@ -82,7 +83,7 @@ def main():
         record("warnOff @ 9: accepted, Egress_Active TRUE, held at 100%",
                acked(answer) and light.value(setup.PROPERTY_EGRESS_ACTIVE) is True and
                light.value(setup.PROPERTY_PRESENT_VALUE) == 100.0)
-        wait_until(written_at, EGRESS_SECONDS + SLACK)
+        sleep_until(written_at, EGRESS_SECONDS + SLACK)
         record("warnOff: after Egress_Time - 0.0% WRITTEN at priority 9 (not relinquished), Egress_Active FALSE",
                light.value(setup.PROPERTY_PRIORITY_ARRAY, 9) == 0.0 and
                light.value(setup.PROPERTY_EGRESS_ACTIVE) is False and light.state() == (0.0, 0.0, IDLE),
@@ -96,7 +97,7 @@ def main():
         record("stop @ 9 during the egress time: Egress_Active FALSE, Priority_Array[9] still 100",
                acked(answer) and light.value(setup.PROPERTY_EGRESS_ACTIVE) is False and
                near(light.value(setup.PROPERTY_PRIORITY_ARRAY, 9), 100.0, 0.01), describe(answer))
-        wait_until(written_at, EGRESS_SECONDS + SLACK)
+        sleep_until(written_at, EGRESS_SECONDS + SLACK)
         record("stop: past Egress_Time the light is still on at 100% (the relinquish was cancelled)",
                light.state() == (100.0, 100.0, IDLE), f"read {light.state()}")
 
@@ -117,7 +118,7 @@ def main():
                "-2.0 not written (Priority_Array[9] still 100)",
                acked(answer) and light.value(setup.PROPERTY_EGRESS_ACTIVE) is True and
                near(light.value(setup.PROPERTY_PRIORITY_ARRAY, 9), 100.0, 0.01), describe(answer))
-        wait_until(written_at, EGRESS_SECONDS + SLACK)
+        sleep_until(written_at, EGRESS_SECONDS + SLACK)
         record("Present_Value -2.0: after Egress_Time priority 9 is relinquished",
                light.value(setup.PROPERTY_PRIORITY_ARRAY, 9) is None and light.state() == (0.0, 0.0, IDLE))
 

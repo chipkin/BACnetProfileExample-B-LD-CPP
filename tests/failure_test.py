@@ -35,7 +35,8 @@ import time
 import ld_setup as setup
 from ld_setup import (FADE_TO, IDLE, LAMP_FAILURE, NO_FAULT_DETECTED, NONE, RAMP_TO, SLACK, STATUS_FLAG_FAULT,
                       STATUS_FLAG_OUT_OF_SERVICE, STEP_UP, acked, application_boolean, application_enumerated,
-                      application_real, application_unsigned, describe, value_out_of_range, wait_until)
+                      application_real, application_unsigned, describe, value_out_of_range)
+from wiretest import sleep_until
 import wiretest
 from wiretest import record
 
@@ -131,7 +132,7 @@ def lamp_burns_out(args):
                light.value(setup.PROPERTY_RELIABILITY) == NO_FAULT_DETECTED and fault_flag(light) is False)
         answer = light.command(FADE_TO, target_level=60.0, fade_time=500)
         written_at = time.monotonic()
-        wait_until(written_at, 0.5 + SLACK)
+        sleep_until(written_at, 0.5 + SLACK)
         record("lamp hook: switched on, the lamp burns out - Reliability LAMP_FAILURE",
                acked(answer) and light.value(setup.PROPERTY_RELIABILITY) == LAMP_FAILURE,
                f"read {light.value(setup.PROPERTY_RELIABILITY)}")

@@ -25,7 +25,8 @@ import sys
 import time
 
 import ld_setup as setup
-from ld_setup import FADE_ACTIVE, FADE_TO, IDLE, SLACK, acked, describe, near, wait_until
+from ld_setup import FADE_ACTIVE, FADE_TO, IDLE, SLACK, acked, describe, near
+from wiretest import sleep_until
 import wiretest
 from wiretest import record
 
@@ -51,7 +52,7 @@ def fade(light, target, fade_seconds, label, fade_time_field=True):
     levels = [level for _, level, _, _ in samples]
     rising = target > start_level
     record(f"{label}: Tracking_Value moves monotonically toward {target:.0f}% ({len(levels)} samples)",
-           setup.monotonic(levels, rising),
+           wiretest.monotonic(levels, rising),
            f"samples {[round(level, 1) if isinstance(level, float) else level for level in levels]}")
     low, high = sorted((start_level, target))
     moving = [(sample_time, level, state, state_time) for sample_time, level, state, state_time in samples
@@ -74,7 +75,7 @@ def fade(light, target, fade_seconds, label, fade_time_field=True):
     record(f"{label}: In_Progress is FADE_ACTIVE whenever Tracking_Value is part-way",
            in_progress and all(state == FADE_ACTIVE for state in in_progress), f"read {in_progress}")
 
-    wait_until(written_at, fade_seconds + SLACK)
+    sleep_until(written_at, fade_seconds + SLACK)
     present_value, tracking_value, in_progress = light.state()
     record(f"{label}: after {fade_seconds:.1f} s Tracking_Value has arrived at {target:.0f}%",
            near(tracking_value, target, 0.01), f"read {tracking_value}")
@@ -91,7 +92,7 @@ def main():
         # Controls: the light is off, idle, uncommanded, with the defaults main.cpp sets.
         record("Control: Lighting Output 1 is off and idle (Present_Value 0, Tracking_Value 0, In_Progress IDLE)",
                light.state() == (0.0, 0.0, IDLE), f"read {light.state()}")
-        command = setup.decode_lighting_command(light.read(setup.PROPERTY_LIGHTING_COMMAND).value_octets)
+        command = wiretest.services.decode_lighting_command(light.read(setup.PROPERTY_LIGHTING_COMMAND).value_octets)
         record("Control: Lighting_Command reads NONE before anything has been written (cl. 12.54.6)",
                command == {"operation": setup.NONE}, f"read {command}")
 
@@ -103,7 +104,7 @@ def main():
         record("Default_Fade_Time is writable (1500 ms)",
                acked(answer) and light.value(setup.PROPERTY_DEFAULT_FADE_TIME) == 1500, describe(answer))
         fade(light, 60.0, 1.5, "fadeTo 60 with no fade-time uses Default_Fade_Time", fade_time_field=False)
-        command = setup.decode_lighting_command(light.read(setup.PROPERTY_LIGHTING_COMMAND).value_octets)
+        command = wiretest.services.decode_lighting_command(light.read(setup.PROPERTY_LIGHTING_COMMAND).value_octets)
         record("Lighting_Command reads back the last command as written (no fade-time field)",
                command == {"operation": FADE_TO, "target_level": 60.0}, f"read {command}")
     finally:

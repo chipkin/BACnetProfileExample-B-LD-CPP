@@ -43,14 +43,17 @@ BACnetExampleBLD  UDP --port                 - Device 389016, Lighting Output 1 
 The Peer is a Python BACnet client (`wiretest.Client`), never another example's
 binary. It plays whatever commands the light on a real site: a lighting
 supervisor, a Schedule, an operator workstation. It writes `Lighting_Command` (a
-`BACnetLightingCommand` it encodes itself, `ld_setup.lighting_command()`) and
+`BACnetLightingCommand`, `wiretest.services.lighting_command()`) and
 `Present_Value`, and reads the light back. Fades are 1-2.5 s and egress times 5 s so a
 run stays short; the checks sample `Tracking_Value` and `In_Progress` every
 0.1 s.
 
-`ld_setup.py` holds what the scripts share. Its generic part -
-`lighting_command()`, `decode_lighting_command()`, `context_real()`, `sample()`,
-`sample_light()`, `monotonic()` - is proposed for `wiretest/` 0.7.0.
+`ld_setup.py` holds what the scripts share about this light (`Light`,
+`sample_light()`, `reset()`). The generic helpers it once held are in `wiretest/`
+0.7.0: `wiretest.services.lighting_command()` / `decode_lighting_command()`,
+`wiretest.context_real()`, `wiretest.sample()`, `wiretest.sleep_until()`,
+`wiretest.monotonic()`, and the short timeout with visible retries is
+`wiretest.Client(retries=2, timeout=1.0)`.
 
 ## `discovery_test.py` - every listed property reads as a value
 
