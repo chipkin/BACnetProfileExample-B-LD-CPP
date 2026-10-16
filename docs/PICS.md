@@ -18,18 +18,19 @@ see [README.md](../README.md).
 | **Vendor Identifier** | 389 |
 | **Product Name** | CAS BACnet Stack Example - B-LD |
 | **Product Model Number** | CAS BACnet Stack Example - B-LD |
-| **Application Software Version** | 1.1.3 |
+| **Application Software Version** | 1.2.0 |
 | **Firmware Revision** | 6.0.23.0 (the CAS BACnet Stack version) |
 | **BACnet Protocol Version** | 1 |
 | **BACnet Protocol Revision** | 30 |
 
 **Product Description:** a BACnet/IP luminaire built on the CAS BACnet Stack. It
-presents a commandable Lighting Output whose level is driven by both a
-16-slot Priority_Array and the constructed `Lighting_Command` SEQUENCE
-(fade/ramp/step; every command completes at once, as this example has no
-dimming engine), plus the same read-only sensors and commandable outputs as
-the B-ASC/B-SA examples, DeviceCommunicationControl, and local
-TimeSynchronization. It answers ReadProperty and WriteProperty for every
+presents one commandable Lighting Output whose level is driven by both a
+16-slot Priority_Array and the constructed `Lighting_Command` SEQUENCE. Every
+operation of Table 12-67 is carried out over time - fades over their fade
+time, ramps at their ramp rate, warns wait out `Egress_Time` - with
+`Tracking_Value`, `In_Progress` and `Egress_Active` reporting it; the lamp and
+dimming driver are a labelled Simulation. Plus DeviceCommunicationControl and
+local TimeSynchronization. It answers ReadProperty and WriteProperty for every
 required property of every object, and is discoverable by Who-Is / I-Am and
 Who-Has / I-Have. It is a tutorial for implementers of the B-LD profile.
 
@@ -105,18 +106,27 @@ No object is dynamically creatable or deletable.
 | Object type | Instance | Object_Name | Optional properties supported |
 |---|:---:|---|---|
 | Device | 389016 | Chipkin Example B-LD | Description |
-| Analog Input | 1 | Bronze | - |
-| Binary Input | 1 | Emerald | - |
-| Multi-State Input | 1 | Hot Pink | State_Text |
-| Analog Output | 1 | Chartreuse | - |
-| Binary Output | 1 | Fuchsia | - |
-| Multi-State Output | 1 | Indigo | - |
-| Lighting Output | 1 | Jade | - |
+| Lighting Output | 1 | Jade | Reliability |
 | Network Port | 1 | Vermilion | - |
 
-`Present_Value` is writable on the three Output objects and on the Lighting
-Output (via its Priority_Array); `Lighting_Command` is writable on the
-Lighting Output. No property of any other object is writable.
+These are exactly the B-LD profile's objects (Annex L.11.2), plus the Device and
+Network Port every device has. (Up to v1.1.3 the example also carried an Analog,
+Binary and Multi-state Input and Output inherited from the B-ASC example.)
+
+On the Lighting Output, writable: `Present_Value` (commandable, via its
+Priority_Array, including the special values -1.0 to -7.0 of Table 12-65),
+`Lighting_Command`, `Default_Fade_Time` (100 to 86400000 ms),
+`Default_Ramp_Rate` (0.1 to 100 %/s), `Default_Step_Increment` (0.1 to 100 %),
+`Egress_Time`, `Out_Of_Service`, and `Reliability` while `Out_Of_Service` is
+TRUE (cl. 12.54.12). A value out of range is refused with PROPERTY /
+VALUE_OUT_OF_RANGE. No property of any other object is writable.
+
+`Lighting_Command` supports every BACnetLightingOperation of Table 12-67 (fadeTo,
+rampTo, stepUp, stepDown, stepOn, stepOff, warn, warnOff, warnRelinquish, stop,
+restoreOn, defaultOn, toggleRestore, toggleDefault); `none` and proprietary
+operations are refused. The object has no `Transition` property, so a direct
+write or relinquish takes effect at once (cl. 12.54.19); `Blink_Warn_Enable` is
+TRUE; `Default_On_Value` is 100.0 %.
 
 The device instance is configurable at run time with `--deviceID` (BACnet
 requires the device instance to be configurable).
@@ -176,101 +186,7 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | Database_Revision | Unsigned | stack default, accepted (Generic UnsignedInteger default: `0`) | no |
 | Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
 
-### Analog Input 1 "Bronze" - REAL, degrees Celsius; starts at 21.5
-
-| Property | Datatype | Served by | Writable |
-|---|---|---|:---:|
-| Object_Identifier | BACnetObjectIdentifier | stack | no |
-| Object_Name | CharacterString | app | no |
-| Object_Type | BACnetObjectType | stack | no |
-| Present_Value | Real | app | no |
-| Status_Flags | BACnetStatusFlags | stack | no |
-| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
-| Out_Of_Service | Boolean | app | no |
-| Units | BACnetEngineeringUnits | app | no |
-| Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
-
-### Binary Input 1 "Emerald" - starts inactive
-
-| Property | Datatype | Served by | Writable |
-|---|---|---|:---:|
-| Object_Identifier | BACnetObjectIdentifier | stack | no |
-| Object_Name | CharacterString | app | no |
-| Object_Type | BACnetObjectType | stack | no |
-| Present_Value | BACnetBinaryPV | app | no |
-| Status_Flags | BACnetStatusFlags | stack | no |
-| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
-| Out_Of_Service | Boolean | app | no |
-| Polarity | BACnetPolarity | app | no |
-| Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
-
-### Multi-state Input 1 "Hot Pink" - state 1 of 3: On, Off, Auto
-
-| Property | Datatype | Served by | Writable |
-|---|---|---|:---:|
-| Object_Identifier | BACnetObjectIdentifier | stack | no |
-| Object_Name | CharacterString | app | no |
-| Object_Type | BACnetObjectType | stack | no |
-| Present_Value | Unsigned | app | no |
-| Status_Flags | BACnetStatusFlags | stack | no |
-| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
-| Out_Of_Service | Boolean | app | no |
-| Number_Of_States | Unsigned | app | no |
-| State_Text *(optional, enabled)* | BACnetARRAY[N] of CharacterString | app | no |
-| Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
-
-### Analog Output 1 "Chartreuse" - REAL setpoint; commandable via a 16-slot Priority_Array (WriteProperty/DS-WP-B); Present_Value, Priority_Array and Current_Command_Priority are resolved by the stack from the array the app maintains
-
-| Property | Datatype | Served by | Writable |
-|---|---|---|:---:|
-| Object_Identifier | BACnetObjectIdentifier | stack | no |
-| Object_Name | CharacterString | app | no |
-| Object_Type | BACnetObjectType | stack | no |
-| Present_Value | Real | stack | yes |
-| Status_Flags | BACnetStatusFlags | stack | no |
-| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
-| Out_Of_Service | Boolean | app | no |
-| Units | BACnetEngineeringUnits | app | no |
-| Priority_Array | BACnetARRAY[16] of BACnetOptionalReal | stack | no |
-| Relinquish_Default | Real | app | no |
-| Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
-| Current_Command_Priority | BACnetOptionalUnsigned | stack | no |
-
-### Binary Output 1 "Fuchsia" - active/inactive; commandable via a 16-slot Priority_Array (WriteProperty/DS-WP-B)
-
-| Property | Datatype | Served by | Writable |
-|---|---|---|:---:|
-| Object_Identifier | BACnetObjectIdentifier | stack | no |
-| Object_Name | CharacterString | app | no |
-| Object_Type | BACnetObjectType | stack | no |
-| Present_Value | BACnetBinaryPV | stack | yes |
-| Status_Flags | BACnetStatusFlags | stack | no |
-| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
-| Out_Of_Service | Boolean | app | no |
-| Polarity | BACnetPolarity | app | no |
-| Priority_Array | BACnetARRAY[16] of BACnetOptionalBinaryPV | stack | no |
-| Relinquish_Default | BACnetBinaryPV | app | no |
-| Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
-| Current_Command_Priority | BACnetOptionalUnsigned | stack | no |
-
-### Multi-state Output 1 "Indigo" - state 1..3; commandable via a 16-slot Priority_Array (WriteProperty/DS-WP-B)
-
-| Property | Datatype | Served by | Writable |
-|---|---|---|:---:|
-| Object_Identifier | BACnetObjectIdentifier | stack | no |
-| Object_Name | CharacterString | app | no |
-| Object_Type | BACnetObjectType | stack | no |
-| Present_Value | Unsigned | stack | yes |
-| Status_Flags | BACnetStatusFlags | stack | no |
-| Event_State | BACnetEventState | stack default, accepted (Generic Enumerated default: `0`) | no |
-| Out_Of_Service | Boolean | app | no |
-| Number_Of_States | Unsigned | app | no |
-| Priority_Array | BACnetARRAY[16] of BACnetOptionalUnsigned | stack | no |
-| Relinquish_Default | Unsigned | app | no |
-| Property_List | BACnetARRAY[N] of BACnetPropertyIdentifier | stack | no |
-| Current_Command_Priority | BACnetOptionalUnsigned | stack | no |
-
-### Lighting Output 1 "Jade" - REAL 0-100%; commandable via a 16-slot Priority_Array (WriteProperty/DS-WP-B) AND via the typed Lighting_Command SEQUENCE (DS-LO-B). This is B-LD's canonical F-LIGHT object. Tracking_Value mirrors Present_Value in this example (an instant-completion simulation, not a real fading driver). Blink_Warn_Enable is on; Egress_Active is always false because nothing in this example drives the egress timer.
+### Lighting Output 1 "Jade" - REAL 0-100%; commandable via a 16-slot Priority_Array (WriteProperty/DS-WP-B) AND via the typed Lighting_Command SEQUENCE (DS-LO-B). This is B-LD's canonical F-LIGHT object. The app's lighting engine (main.cpp section 1b) runs every Table 12-67 operation over time: Present_Value is the target, Tracking_Value the level being driven, In_Progress fadeActive/rampActive while it moves, Egress_Active TRUE during a warn's egress time. Reliability (optional, enabled) reports lampFailure from the lamp Simulation and is writable only while Out_Of_Service is TRUE (cl. 12.54.12); the dimming defaults and Egress_Time are writable, range-checked. Last_On_Value and Default_On_Value (required in 135-2024, cl. 12.54.44/45) are served by the app but not rows here because the stack's property-profile reference at this pin does not list them; Current_Command_Priority and Property_List are served by the stack
 
 | Property | Datatype | Served by | Writable |
 |---|---|---|:---:|
@@ -282,13 +198,14 @@ Every object this example creates, and every REQUIRED property of each (per ANSI
 | Lighting_Command | BACnetLightingCommand | app | yes |
 | In_Progress | BACnetLightingInProgress | app | no |
 | Status_Flags | BACnetStatusFlags | stack | no |
-| Out_Of_Service | Boolean | app | no |
+| Reliability *(optional, enabled)* | BACnetReliability | app | yes |
+| Out_Of_Service | Boolean | app | yes |
 | Blink_Warn_Enable | Boolean | app | no |
-| Egress_Time | Unsigned | app | no |
+| Egress_Time | Unsigned | app | yes |
 | Egress_Active | Boolean | app | no |
-| Default_Fade_Time | Unsigned | app | no |
-| Default_Ramp_Rate | Real | app | no |
-| Default_Step_Increment | Real | app | no |
+| Default_Fade_Time | Unsigned | app | yes |
+| Default_Ramp_Rate | Real | app | yes |
+| Default_Step_Increment | Real | app | yes |
 | Priority_Array | BACnetARRAY[16] of BACnetOptionalReal | stack | no |
 | Relinquish_Default | Real | app | no |
 | Lighting_Command_Default_Priority | Unsigned | app | no |

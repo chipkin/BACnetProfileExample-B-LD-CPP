@@ -5,6 +5,73 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - unreleased
+
+The example is now **Profile-functional**: the Lighting Output does what
+ANSI/ASHRAE 135-2024 cl. 12.54 says one does, over time, and Wire Tests prove it
+against a Python Peer.
+
+### Added
+
+- **A Lighting Output engine** (`main.cpp` section 1b, real BACnet behaviour). A
+  `fadeTo` puts `Present_Value` at the target at once while `Tracking_Value` moves
+  to it in proportion to the fade time with `In_Progress` = `fadeActive`; `rampTo`
+  moves at the ramp rate with `rampActive`; then `idle`, with `Tracking_Value`
+  equal to `Present_Value`. Every operation of Table 12-67 is carried out:
+  `stepUp` / `stepDown` / `stepOn` / `stepOff` (with their 100 % and 1.0 %
+  clamps, ignored while off), `warn`, `warnRelinquish` and `warnOff` (blink, hold
+  for `Egress_Time` with `Egress_Active` TRUE, then relinquish or write 0.0 %,
+  with conditions (a)-(c)), `stop` (holds a fade at its `Tracking_Value`, cancels
+  an egress timer), `restoreOn`, `defaultOn`, `toggleRestore`, `toggleDefault`.
+  The halting rules of cl. 12.54.6.1 (a higher- or same-priority write halts a
+  command in progress; a lower one does not), "not executed" when the command's
+  priority is not in control, and the `Present_Value` special values -1.0 to -7.0
+  of Table 12-65.
+- **A lamp Simulation** (`main.cpp` section 1c, labelled): a simulated dimming
+  driver follows `Tracking_Value`, prints a blink for a blink-warn, and - with the
+  test-only environment variable `BLD_TEST_LAMP_BURNS_OUT=1` - burns out the first
+  time it is switched on, so the example reports `Reliability` = `lampFailure`.
+- **`Reliability`** (optional) on the Lighting Output: `lampFailure` from the
+  lamp, which sets the FAULT flag of `Status_Flags`. **`Out_Of_Service`** is
+  writable, and while it is TRUE `Reliability` is writable too (cl. 12.54.12).
+- **Writable, range-checked** `Default_Fade_Time` (100-86400000 ms),
+  `Default_Ramp_Rate` (0.1-100 %/s), `Default_Step_Increment` (0.1-100 %) and
+  `Egress_Time`.
+- **Wire Tests** for the Profile Function and both Failure Modes:
+  `tests/fade_test.py`, `ramp_step_test.py`, `stop_priority_test.py`,
+  `warn_test.py`, `failure_test.py`, sharing `tests/ld_setup.py` (which carries
+  a `BACnetLightingCommand` encoder and a sampler proposed for `wiretest/` 0.7.0).
+  Each check was shown to fail with its behaviour removed from `main.cpp`. The
+  tests use UDP ports 48020-48029.
+
+### Changed
+
+- **The BACnet Surface is exactly the profile's set**: Device, Lighting Output 1
+  "Jade", Network Port 1. Analog Input 1 "Bronze", Binary Input 1 "Emerald",
+  Multi-state Input 1 "Hot Pink", Analog Output 1 "Chartreuse", Binary Output 1
+  "Fuchsia" and Multi-state Output 1 "Indigo" - inherited from the B-ASC example,
+  not part of a B-LD (Annex L.11.2) - are removed, with the arrow keys that nudged
+  Analog Input 1.
+- `Lighting_Command` is recorded only when accepted, and operation `none` (and
+  any proprietary operation) is refused with PROPERTY / VALUE_OUT_OF_RANGE, as
+  Table 12-67 requires. `Present_Value` writes between 0.0 and 1.0 % are clamped
+  to 1.0 % (cl. 12.54.4).
+- APP_VERSION 1.1.3 -> 1.2.0. README (scenario, what is real and what is
+  Simulation, Verify, Wire Tests), TUTORIAL ("Add a second Lighting Output", the
+  engine and the Simulation), AGENTS.md, PICS (objects, writable properties,
+  regenerated objects block) and `tests/README.md` rewritten to match.
+- The discovery Wire Test expects the three objects, and the runner's default
+  port is 48020.
+
+### Fixed
+
+- **`Last_On_Value` and `Default_On_Value` were listed in `Property_List` but
+  never served**, so they read `0.0` (the stack's silent default). They now read
+  the last `Present_Value` >= 1.0 % (100.0 until the light has been on) and 100.0.
+- Clause citations: "cl. 12.54.9" (Status_Flags) was cited for the
+  `Lighting_Command` defaults and the required target-level in TUTORIAL and
+  AGENTS.md; they are cl. 12.54.6 Table 12-66 and Table 12-67.
+
 ## [1.1.3] - unreleased
 
 ### Changed

@@ -5,83 +5,77 @@
 // BACnet Profile Example - B-LD (BACnet Lighting Device) - C++
 //
 // This example implements the BACnet "B-LD" (Lighting Device) profile with the
-// CAS BACnet Stack. It is the B-ASC (Application Specific Controller) example
-// plus the object the profile exists for: a Lighting Output.
+// CAS BACnet Stack: a luminaire that a lighting system dims, fades, ramps, steps,
+// blink-warns and switches over BACnet.
 //
-// A B-LD (ANSI/ASHRAE 135, Annex L.11) is a light: a device that a lighting
-// system dims, fades, and switches over BACnet. It must support:
+// ANSI/ASHRAE 135-2024 Annex L.11.2: "A B-LD is any device that implements Binary
+// Lighting Output and/or Lighting Output objects". Its BIBBs:
 //
 //     DS-RP-B     - respond to ReadProperty requests,
 //     DS-WP-B     - allow other devices to WriteProperty its objects,
-//     DS-LO-B     - present a Lighting Output object (NEW - the defining BIBB).
-//                   (The profile says "DS-BLO-B *or* DS-LO-B" - a Binary Lighting
+//     DS-LO-B     - implement the Lighting Output object type (the defining BIBB).
+//                   (The profile says "DS-BLO-B or DS-LO-B" - a Binary Lighting
 //                   Output would satisfy it too. We implement the Lighting Output,
-//                   the dimmable one, because it is the richer of the two and the
-//                   one that carries Lighting_Command. Only one is required, so a
-//                   faithful example implements only one.)
+//                   the dimmable one that carries Lighting_Command. Only one is
+//                   required, so a faithful example implements only one.)
 //     DM-DDB-B    - answer Who-Is with I-Am      (handled by the stack),
 //     DM-DOB-B    - answer Who-Has with I-Have   (handled by the stack),
 //     DM-DCC-B    - respond to DeviceCommunicationControl,
-//     DM-TS-B     - accept TimeSynchronization (NEW): a lighting system tells the
-//                   device what time it is, so scheduled scenes line up. (The
-//                   profile says "DM-TS-B or DM-UTC-B"; we do local TimeSync.)
+//     DM-TS-B     - accept TimeSynchronization: a lighting system tells the device
+//                   what time it is, so scheduled scenes line up. (The profile
+//                   says "DM-TS-B or DM-UTC-B"; we do local TimeSync.)
 //
 // It does NOT require COV, alarms, scheduling, or trending, so this example leaves
 // those off. (A device that SUPERVISES other lights - writing to them - is a
 // B-LS, a different profile with its own example.)
 //
-// HOW A LIGHTING OUTPUT IS DRIVEN. There are two ways, and the example serves
-// both because BACnet requires both:
+// THE PROFILE FUNCTION: the light does what a lighting system tells it to, the way
+// cl. 12.54 says a Lighting Output does it. Write Lighting_Command "fadeTo 80% over
+// 2 s" and Present_Value becomes 80 at once (the TARGET) while Tracking_Value - the
+// level the lamp is actually being driven at - walks from where it was to 80 over
+// 2 s, with In_Progress = FADE_ACTIVE until it arrives. Section 1b is that engine:
+// every operation of Table 12-67 (fade, ramp, step, warn with egress time, stop,
+// restore/default on, toggles), the halting rules of cl. 12.54.6.1, and the
+// Present_Value special values of Table 12-65. All of it is real BACnet behaviour.
 //
-//   1. Present_Value (REAL, 0.0-100.0 percent) is COMMANDABLE, exactly like the
-//      Analog Output in B-SA: a 16-slot Priority_Array plus a Relinquish_Default.
-//      Writing it jumps the light straight to a level.
+// WHY THE EXAMPLE RUNS THE ENGINE ITSELF. The customer interface of the CAS BACnet
+// Stack hands a Lighting_Command write to the application as plain numbers
+// (RegisterCallbackSetPropertyLightingCommand) and stops there. The stack's own
+// Lighting Output engine is part of its test-tool interface, which a product does
+// not ship. So a B-LD built on the customer interface implements the timing itself,
+// in its main loop - which is what a real luminaire does anyway, because only it
+// knows how its driver moves.
 //
-//   2. Lighting_Command is the interesting one, and it is what makes a light a
-//      light rather than a generic analog output. It is a CONSTRUCTED value - a
-//      BACnetLightingCommand SEQUENCE - carrying an operation (fadeTo, rampTo,
-//      stepUp, warn, stop, ...) plus the optional parameters that operation needs
-//      (target-level, ramp-rate, step-increment, fade-time, priority). Writing it
-//      tells the light HOW to get somewhere, not just where: "fade to 75% over
-//      3 seconds" rather than "be 75% now".
+// SIMULATION (labelled as such everywhere it appears - section 1c). There is no
+// lamp or dimming driver on a PC. A few lines stand in for one: the simulated
+// driver follows Tracking_Value, prints a blink when a warn asks for one, and can
+// report a burnt-out lamp (Reliability LAMP_FAILURE) when a Wire Test asks for it
+// through the test-only environment variable BLD_TEST_LAMP_BURNS_OUT. Everything
+// a client sees over BACnet is the real Lighting Output behaviour.
 //
-//      The application never encodes or decodes that SEQUENCE. It hands the stack
-//      the fields as plain numbers through RegisterCallbackGetPropertyLightingCommand
-//      and receives them the same way through RegisterCallbackSetPropertyLightingCommand;
-//      the stack does all the BACnet encoding. See section 2c.
-//
-// The device keeps the same objects as B-ASC / B-SA and adds the Lighting Output.
-// Each object has a colour name (the convention shared across this example series):
+// The objects are exactly the profile's set. Each has a colour name (the
+// convention shared across this example series):
 //
 //     Device 389016            "Chipkin Example B-LD"     (instance configurable with --deviceID)
-//     Analog Input  1          "Bronze"      (REAL, degrees Celsius; read-only)
-//     Binary Input  1          "Emerald"     (active / inactive; read-only)
-//     Multi-State Input 1      "Hot Pink"    (state 1..3; read-only)
-//     Analog Output 1          "Chartreuse"  (REAL setpoint; WRITABLE, commandable)
-//     Binary Output 1          "Fuchsia"     (active / inactive; WRITABLE, commandable)
-//     Multi-State Output 1     "Indigo"      (state 1..3; WRITABLE, commandable)
-//     Lighting Output 1        "Jade"        (REAL 0-100%; WRITABLE, commandable,
-//                                             + Lighting_Command - the B-LD addition)
+//     Lighting Output 1        "Jade"        (REAL 0-100%; commandable Present_Value,
+//                                             writable Lighting_Command - DS-LO-B)
 //     Network Port 1           "Vermilion"   (the BACnet/IP port - required)
 //
-// Output objects are COMMANDABLE: their Present_Value is driven by a 16-slot
-// BACnet Priority_Array. A WriteProperty(Present_Value, value, priority) sets a
-// slot; writing NULL relinquishes it; the stack reports the highest-priority
-// non-null slot (or Relinquish_Default) as the effective Present_Value. The app
-// stores the priority array (see the Commandable struct below) and serves it; the
-// stack computes Present_Value from it.
+// Present_Value is COMMANDABLE: it is driven by a 16-slot BACnet Priority_Array.
+// A WriteProperty(Present_Value, value, priority) sets a slot; writing NULL
+// relinquishes it; the stack reports the highest-priority non-null slot (or
+// Relinquish_Default) as the effective Present_Value. The app stores the priority
+// array (the Commandable struct below) and serves it; the stack computes
+// Present_Value and Current_Command_Priority from it.
 //
 // To be a conformant BACnet device (Protocol_Revision 30) each object must
 // expose its full set of REQUIRED properties. Most are generated by the stack
 // (Object_Identifier, Object_Type, Status_Flags, Object_List, Protocol_*).
-// Event_State is NOT generated - with no alarming configured it simply reads its
-// datatype default of normal(0), correct by coincidence, not because the stack
-// computes it. The handful that the application must supply are served by the
-// Get*Property callbacks below, and a few are turned on with SetPropertyEnabled.
+// The handful that the application must supply are served by the Get*Property
+// callbacks below, and a few are turned on with SetPropertyEnabled.
 //
-// Interactive keys (handled by the shared helper): h = help, q = quit,
-// up/down = nudge Analog Input 1 by +/-1.1. Command line: --port <n>,
-// --deviceID <n>.
+// Interactive keys (handled by the shared helper): h = help, q = quit.
+// Command line: --port <n>, --deviceID <n>.
 //
 // All the UDP/stack plumbing lives in common/CASExampleHelper so this file can
 // stay focused on the BACnet logic.
@@ -93,7 +87,10 @@
                                     // LoadBACnetFunctions() before any BACnetStack_* call -
                                     // see the top of main() below.
 
+#include <chrono>  // the lighting engine's monotonic clock
+#include <math.h>  // fabsf()
 #include <stdio.h>
+#include <stdlib.h> // getenv() - the test-only lamp hook (section 1c)
 #include <string.h>
 #include <string>
 #include <time.h>  // F-TIMESYNC: InitSyncedDateTimeFromHost() seeds Local_Date/Local_Time
@@ -120,6 +117,7 @@ static const uint16_t OBJECT_TYPE_LIGHTING_OUTPUT = 54;
 
 // -- Lighting Output property identifiers (Property_Identifier enumeration) ---
 //    Full list: submodules/cas-bacnet-stack/source/BACnetPropertyIdentifier.h
+static const uint32_t PROPERTY_IDENTIFIER_RELIABILITY = 103;
 static const uint32_t PROPERTY_IDENTIFIER_TRACKING_VALUE = 164;
 static const uint32_t PROPERTY_IDENTIFIER_BLINK_WARN_ENABLE = 373;
 static const uint32_t PROPERTY_IDENTIFIER_DEFAULT_FADE_TIME = 374;
@@ -130,6 +128,8 @@ static const uint32_t PROPERTY_IDENTIFIER_IN_PROGRESS = 378;
 static const uint32_t PROPERTY_IDENTIFIER_LIGHTING_COMMAND = 380;
 static const uint32_t PROPERTY_IDENTIFIER_LIGHTING_COMMAND_DEFAULT_PRIORITY = 381;
 static const uint32_t PROPERTY_IDENTIFIER_EGRESS_ACTIVE = 386;
+static const uint32_t PROPERTY_IDENTIFIER_DEFAULT_ON_VALUE = 4194341; // cl. 21: default-on-value (4194341)
+static const uint32_t PROPERTY_IDENTIFIER_LAST_ON_VALUE = 4194342;    // cl. 21: last-on-value (4194342)
 
 // -- BACnetLightingOperation - what a Lighting_Command tells the light to DO --
 //    Full list: submodules/cas-bacnet-stack/source/BACnetLightingOperation.h
@@ -138,13 +138,45 @@ static const uint32_t LIGHTING_OPERATION_FADE_TO = 1;
 static const uint32_t LIGHTING_OPERATION_RAMP_TO = 2;
 static const uint32_t LIGHTING_OPERATION_STEP_UP = 3;
 static const uint32_t LIGHTING_OPERATION_STEP_DOWN = 4;
+static const uint32_t LIGHTING_OPERATION_STEP_ON = 5;
+static const uint32_t LIGHTING_OPERATION_STEP_OFF = 6;
+static const uint32_t LIGHTING_OPERATION_WARN = 7;
+static const uint32_t LIGHTING_OPERATION_WARN_OFF = 8;
+static const uint32_t LIGHTING_OPERATION_WARN_RELINQUISH = 9;
 static const uint32_t LIGHTING_OPERATION_STOP = 10;
+static const uint32_t LIGHTING_OPERATION_RESTORE_ON = 11;
+static const uint32_t LIGHTING_OPERATION_DEFAULT_ON = 12;
+static const uint32_t LIGHTING_OPERATION_TOGGLE_RESTORE = 13;
+static const uint32_t LIGHTING_OPERATION_TOGGLE_DEFAULT = 14;
 
 // -- BACnetLightingInProgress - what the light is doing right now -------------
 //    Full list: submodules/cas-bacnet-stack/source/BACnetLightingInProgress.h
 static const uint32_t LIGHTING_IN_PROGRESS_IDLE = 0;
 static const uint32_t LIGHTING_IN_PROGRESS_FADE_ACTIVE = 1;
 static const uint32_t LIGHTING_IN_PROGRESS_RAMP_ACTIVE = 2;
+
+// -- BACnetReliability (cl. 21) - only the two values this example reports ----
+//    Full list: submodules/cas-bacnet-stack/source/BACnetReliability.h
+static const uint32_t RELIABILITY_NO_FAULT_DETECTED = 0;
+static const uint32_t RELIABILITY_LAMP_FAILURE = 16;
+static const uint32_t RELIABILITY_HIGHEST_DEFINED = 25; // multi-state-out-of-range, 135-2024
+
+// -- Error code this example answers that common/ does not declare ------------
+//    Full list: submodules/cas-bacnet-stack/source/BACnetErrorCode.h
+static const uint32_t ERROR_CODE_WRITE_ACCESS_DENIED = 40;
+
+// The ranges cl. 12.54 gives the Lighting Output's parameters (Table 12-66 and
+// cl. 12.54.16 - 12.54.18). A value outside them is Error PROPERTY /
+// VALUE_OUT_OF_RANGE.
+static const float LIGHTING_LEVEL_MIN = 0.0f;
+static const float LIGHTING_LEVEL_MAX = 100.0f;
+static const float LIGHTING_LEVEL_DIMMEST = 1.0f;          // the lowest "on" level (cl. 12.54.4)
+static const uint32_t LIGHTING_FADE_TIME_MIN = 100;         // ms
+static const uint32_t LIGHTING_FADE_TIME_MAX = 86400000;    // ms (1 day)
+static const float LIGHTING_RAMP_RATE_MIN = 0.1f;           // % per second
+static const float LIGHTING_RAMP_RATE_MAX = 100.0f;
+static const float LIGHTING_STEP_INCREMENT_MIN = 0.1f;      // %
+static const float LIGHTING_STEP_INCREMENT_MAX = 100.0f;
 
 // NOTE: ENGINEERING_UNITS_PERCENT and SERVICE_TIME_SYNCHRONIZATION are declared
 // in common/CASBACnetStackExampleConstants.h, the series-wide union - declaring
@@ -155,7 +187,7 @@ static const uint32_t LIGHTING_IN_PROGRESS_RAMP_ACTIVE = 2;
 // 1. Example + device configuration
 // -----------------------------------------------------------------------------
 static const char* APP_NAME = "BACnet B-LD (Lighting Device) Example - C++";
-static const char* APP_VERSION = "1.1.3";
+static const char* APP_VERSION = "1.2.0";
 
 // The device instance. BACnet requires this to be configurable, so it defaults
 // to 389016 and can be overridden on the command line with --deviceID.
@@ -193,9 +225,9 @@ static const char* DEVICE_NAME = "Chipkin Example B-LD";
 // this string describes this tutorial.
 static const char* DEVICE_DESCRIPTION =
     "Chipkin CAS BACnet Stack Example - B-LD (Lighting Device) profile. A luminaire "
-    "with a commandable Lighting Output whose level is driven by a Priority_Array and "
-    "by the constructed Lighting_Command property (fade/ramp/step), plus read-only "
-    "sensor inputs, DeviceCommunicationControl, and time synchronisation (DM-TS-B).";
+    "with a commandable Lighting Output that fades, ramps, steps and blink-warns as "
+    "Lighting_Command tells it to, plus DeviceCommunicationControl and time "
+    "synchronisation (DM-TS-B).";
 
 // Device identity strings (read by clients, and used to populate I-Am).
 //   VENDOR_NAME - your company name; it must match VENDOR_IDENTIFIER above.
@@ -225,12 +257,6 @@ static const char* DCC_PASSWORD = "";  // "" = no password required
 // the version getters themselves are, so they must be loaded first).
 static std::string g_firmwareRevision;
 
-// The sensor objects (all instance 1) and their colour names.
-static const uint32_t ANALOG_INPUT_INSTANCE = 1;       // "Bronze"
-static const uint32_t BINARY_INPUT_INSTANCE = 1;       // "Emerald"
-static const uint32_t MULTI_STATE_INPUT_INSTANCE = 1;  // "Hot Pink"
-static const uint32_t MULTI_STATE_INPUT_NUMBER_OF_STATES = 3;
-
 // The Network Port object - every BACnet device must have one. It represents
 // the BACnet/IP port this device communicates on.
 static const uint32_t NETWORK_PORT_INSTANCE = 1;       // "Vermilion"
@@ -245,64 +271,50 @@ static uint8_t g_ipSubnetMask[4] = { 0, 0, 0, 0 };
 static uint8_t g_ipDefaultGateway[4] = { 0, 0, 0, 0 };
 static uint16_t g_bacnetIpUdpPort = 47808;
 
-// Analog Input 1's live present value (degrees Celsius). Starts at 21.5 and is
-// nudged by the up/down arrow keys. A real sensor would update this from
-// hardware instead.
-static float g_analogInput1Value = 21.5f;
-
-// The commandable OUTPUT objects (all instance 1) and their colour names. These
-// are what make this a B-SA actuator: clients drive them with WriteProperty.
-static const uint32_t ANALOG_OUTPUT_INSTANCE = 1;        // "Chartreuse"
-static const uint32_t BINARY_OUTPUT_INSTANCE = 1;        // "Fuchsia"
-static const uint32_t MULTI_STATE_OUTPUT_INSTANCE = 1;   // "Indigo"
-static const uint32_t MULTI_STATE_OUTPUT_NUMBER_OF_STATES = 3;
 static const uint32_t BACNET_PRIORITY_ARRAY_SIZE = 16;
 
 // A BACnet commandable value: a 16-slot Priority_Array plus a Relinquish_Default.
-// Each slot is either null (relinquished) or holds a commanded value. A real
-// device would map the resolved Present_Value onto its physical output; here we
-// just store the commands. The values are kept as double and cast per object
-// type (REAL for AO, 0/1 for BO, state number for MSO).
+// Each slot is either null (relinquished) or holds a commanded value.
 struct Commandable {
     bool isSet[16];          // is slot i (1..16) commanded?
     double value[16];        // the commanded value at slot i
     double relinquishDefault; // used when every slot is null
 };
 
-// The { { false }, { 0 }, default } initializer zero-fills all 16 slots of isSet
-// and value (C++ aggregate rules: the remaining elements are value-initialized),
-// so every priority slot starts null and Present_Value reports relinquishDefault.
-static Commandable g_analogOutput = { { false }, { 0 }, 20.0 }; // setpoint, default 20.0 C
-static Commandable g_binaryOutput = { { false }, { 0 }, 0.0 };  // default inactive (0)
-static Commandable g_multiStateOutput = { { false }, { 0 }, 1.0 }; // default state 1
-
-// --- The Lighting Output (the B-LD addition) ---------------------------------
+// --- The Lighting Output ------------------------------------------------------
 static const uint32_t LIGHTING_OUTPUT_INSTANCE = 1;      // "Jade"
 
-// Its Present_Value is commandable exactly like the Analog Output above - a level
-// in percent. Relinquish_Default 0.0 means "when nothing commands this light, it
-// is off", which is the safe resting state for a luminaire.
+// Its Present_Value is a level in percent, commanded through the Priority_Array.
+// Relinquish_Default 0.0 means "when nothing commands this light, it is off",
+// which is the safe resting state for a luminaire. The { { false }, { 0 }, 0.0 }
+// initializer zero-fills all 16 slots (C++ aggregate rules), so every slot starts
+// null and Present_Value reports Relinquish_Default.
 static Commandable g_lightingOutput = { { false }, { 0 }, 0.0 };
 
-// The Lighting Output's REQUIRED scalar properties. A real luminaire would drive
-// its dimming hardware from these; here they are the device's configuration.
-//   Default_Fade_Time        - fade duration (ms) used when a fadeTo omits fade-time
-//   Default_Ramp_Rate        - percent per second used when a rampTo omits ramp-rate
-//   Default_Step_Increment   - percent used when a stepUp/stepDown omits step-increment
-//   Egress_Time              - the blink-warn "get out of the room" period, in SECONDS
+// The Lighting Output's configuration properties (cl. 12.54.13 - 12.54.18,
+// 12.54.27, 12.54.45). The four marked WRITABLE accept WriteProperty, range
+// checked as the clause says, so a lighting system - or a Wire Test - can tune
+// them:
+//   Default_Fade_Time        - ms a fadeTo takes when it omits fade-time   (WRITABLE)
+//   Default_Ramp_Rate        - % per second a rampTo omitting ramp-rate uses (WRITABLE)
+//   Default_Step_Increment   - % a step omitting step-increment uses       (WRITABLE)
+//   Egress_Time              - SECONDS a warnRelinquish / warnOff holds the
+//                              light before it goes                        (WRITABLE)
+//   Blink_Warn_Enable        - whether a warn blinks and waits (TRUE here)
+//   Default_On_Value         - the level a defaultOn command writes
 //   Lighting_Command_Default_Priority - the priority a Lighting_Command writes at
 //                              when it does not name one (BACnet default is 16)
-static const uint32_t LIGHTING_DEFAULT_FADE_TIME = 3000;      // 3.0 s, in milliseconds
-static const float LIGHTING_DEFAULT_RAMP_RATE = 10.0f;        // 10 % per second
-static const float LIGHTING_DEFAULT_STEP_INCREMENT = 5.0f;    // 5 %
-static const uint32_t LIGHTING_EGRESS_TIME = 30;              // 30 s
+static uint32_t g_defaultFadeTime = 3000;        // 3.0 s, in milliseconds
+static float g_defaultRampRate = 10.0f;          // 10 % per second
+static float g_defaultStepIncrement = 5.0f;      // 5 %
+static uint32_t g_egressTime = 30;               // 30 s
+static const bool LIGHTING_BLINK_WARN_ENABLE = true;
+static const float LIGHTING_DEFAULT_ON_VALUE = 100.0f;
 static const uint32_t LIGHTING_COMMAND_DEFAULT_PRIORITY = 16;
 
-// The last Lighting_Command a client wrote. Reading Lighting_Command reports back
-// what the light was last told to do, so we remember it. A real device would ALSO
-// be running the fade/ramp this describes; this example stores the command and
-// reports the resulting level, which is what makes the read/write pair legible
-// without simulating dimming hardware.
+// The last Lighting_Command a client wrote. "The Lighting_Command property shall
+// indicate the last written value or NONE if it has not yet been written"
+// (cl. 12.54.6), so we remember it, including which optional fields it carried.
 struct LightingCommandState {
     uint32_t operation;
     bool useTargetLevel;   float targetLevel;
@@ -311,19 +323,10 @@ struct LightingCommandState {
     bool useFadeTime;      uint32_t fadeTime;
     bool usePriority;      uint32_t priority;
 };
-
-// Starts as `none` - the light has not been commanded yet. `none` is a real
-// BACnetLightingOperation value (0), not a placeholder: it is what a Lighting
-// Output reports before anything has driven it.
 static LightingCommandState g_lightingCommand = {
     LIGHTING_OPERATION_NONE,
     false, 0.0f, false, 0.0f, false, 0.0f, false, 0, false, 0
 };
-
-// Is the light mid-fade / mid-ramp? A real device would set this while its dimming
-// hardware is moving and clear it on arrival. This example completes every command
-// instantly, so it reports the honest answer: idle.
-static uint32_t g_lightingInProgress = LIGHTING_IN_PROGRESS_IDLE;
 
 // A WriteProperty to a commandable Present_Value carries a priority 1..16. When a
 // client omits it, BACnet uses 16 (the lowest priority) - so normalise anything
@@ -333,77 +336,573 @@ static uint8_t EffectivePriority(uint8_t priority) {
 }
 
 // Store a commanded value at a priority slot (a WriteProperty of a value).
-static void CommandWrite(Commandable* c, uint8_t priority, double value) {
-    const uint8_t p = EffectivePriority(priority);
-    c->isSet[p - 1] = true;
-    c->value[p - 1] = value;
+static void CommandWrite(Commandable* commandable, uint8_t priority, double value) {
+    const uint8_t slotPriority = EffectivePriority(priority);
+    commandable->isSet[slotPriority - 1] = true;
+    commandable->value[slotPriority - 1] = value;
 }
 
 // Relinquish (clear) a priority slot - i.e. a WriteProperty of NULL.
-static void CommandRelinquish(Commandable* c, uint8_t priority) {
-    const uint8_t p = EffectivePriority(priority);
-    c->isSet[p - 1] = false;
+static void CommandRelinquish(Commandable* commandable, uint8_t priority) {
+    const uint8_t slotPriority = EffectivePriority(priority);
+    commandable->isSet[slotPriority - 1] = false;
 }
 
 // Resolve which Commandable an (objectType, objectInstance) maps to, or NULL.
 static Commandable* GetCommandable(uint16_t objectType, uint32_t objectInstance) {
-    if (objectType == OBJECT_TYPE_ANALOG_OUTPUT && objectInstance == ANALOG_OUTPUT_INSTANCE) {
-        return &g_analogOutput;
-    }
-    if (objectType == OBJECT_TYPE_BINARY_OUTPUT && objectInstance == BINARY_OUTPUT_INSTANCE) {
-        return &g_binaryOutput;
-    }
-    if (objectType == OBJECT_TYPE_MULTI_STATE_OUTPUT && objectInstance == MULTI_STATE_OUTPUT_INSTANCE) {
-        return &g_multiStateOutput;
-    }
-    // The Lighting Output is commandable in exactly the same way as the Analog
-    // Output - a REAL level resolved from the Priority_Array. Adding it here is all
-    // it takes to give it the whole commandable mechanism.
     if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && objectInstance == LIGHTING_OUTPUT_INSTANCE) {
         return &g_lightingOutput;
     }
     return NULL;
 }
 
-// Resolve the light's current level the way the stack does: highest-priority
-// commanded slot, else Relinquish_Default. Used to serve Tracking_Value and to
-// print the level - the stack serves Present_Value itself.
-static float ResolveLightingLevel(const Commandable* c) {
-    for (uint32_t i = 0; i < BACNET_PRIORITY_ARRAY_SIZE; i++) {
-        if (c->isSet[i]) {
-            return (float)c->value[i];
+// The priority Present_Value is taken from - Current_Command_Priority (cl. 12.54.39)
+// - or 0 when every slot is null and Present_Value is Relinquish_Default. The
+// stack serves the property itself from the same slots; the engine needs it too.
+static uint8_t CurrentCommandPriority(const Commandable* commandable) {
+    for (uint8_t slotPriority = 1; slotPriority <= BACNET_PRIORITY_ARRAY_SIZE; slotPriority++) {
+        if (commandable->isSet[slotPriority - 1]) {
+            return slotPriority;
         }
     }
-    return (float)c->relinquishDefault;
+    return 0;
+}
+
+// Present_Value, resolved the way the stack does: the highest-priority commanded
+// slot, else Relinquish_Default. `skippedPriority` (1..16) leaves one slot out -
+// "what would Present_Value be if this slot were relinquished?" (warnRelinquish
+// asks that); pass 0 to skip nothing.
+static float ResolvePresentValue(const Commandable* commandable, uint8_t skippedPriority = 0) {
+    for (uint8_t slotPriority = 1; slotPriority <= BACNET_PRIORITY_ARRAY_SIZE; slotPriority++) {
+        if (slotPriority != skippedPriority && commandable->isSet[slotPriority - 1]) {
+            return (float)commandable->value[slotPriority - 1];
+        }
+    }
+    return (float)commandable->relinquishDefault;
 }
 
 // A human-readable name for a BACnetLightingOperation, for the console log.
 static const char* LightingOperationName(uint32_t operation) {
     switch (operation) {
-        case LIGHTING_OPERATION_NONE:      return "none";
-        case LIGHTING_OPERATION_FADE_TO:   return "fadeTo";
-        case LIGHTING_OPERATION_RAMP_TO:   return "rampTo";
-        case LIGHTING_OPERATION_STEP_UP:   return "stepUp";
-        case LIGHTING_OPERATION_STEP_DOWN: return "stepDown";
-        case LIGHTING_OPERATION_STOP:      return "stop";
-        default:                           return "(other)";
+        case LIGHTING_OPERATION_NONE:            return "none";
+        case LIGHTING_OPERATION_FADE_TO:         return "fadeTo";
+        case LIGHTING_OPERATION_RAMP_TO:         return "rampTo";
+        case LIGHTING_OPERATION_STEP_UP:         return "stepUp";
+        case LIGHTING_OPERATION_STEP_DOWN:       return "stepDown";
+        case LIGHTING_OPERATION_STEP_ON:         return "stepOn";
+        case LIGHTING_OPERATION_STEP_OFF:        return "stepOff";
+        case LIGHTING_OPERATION_WARN:            return "warn";
+        case LIGHTING_OPERATION_WARN_OFF:        return "warnOff";
+        case LIGHTING_OPERATION_WARN_RELINQUISH: return "warnRelinquish";
+        case LIGHTING_OPERATION_STOP:            return "stop";
+        case LIGHTING_OPERATION_RESTORE_ON:      return "restoreOn";
+        case LIGHTING_OPERATION_DEFAULT_ON:      return "defaultOn";
+        case LIGHTING_OPERATION_TOGGLE_RESTORE:  return "toggleRestore";
+        case LIGHTING_OPERATION_TOGGLE_DEFAULT:  return "toggleDefault";
+        default:                                 return "(proprietary)";
     }
 }
 
 // Is this read a single Priority_Array element (Priority_Array[1..16])? If so,
 // report whether that slot is commanded (*slotIsSet) and its value (*slotValue).
-// The typed Get callbacks use this to serve a commandable object's Priority_Array
-// and to let the stack compute Present_Value from the highest non-null slot.
-static bool ReadPrioritySlot(const Commandable* c, uint32_t propertyIdentifier,
+// The typed Get callbacks use this to serve the Priority_Array and to let the
+// stack compute Present_Value from the highest non-null slot.
+static bool ReadPrioritySlot(const Commandable* commandable, uint32_t propertyIdentifier,
                              bool useArrayIndex, uint32_t propertyArrayIndex,
                              bool* slotIsSet, double* slotValue) {
     if (propertyIdentifier != PROPERTY_IDENTIFIER_PRIORITY_ARRAY || !useArrayIndex ||
         propertyArrayIndex < 1 || propertyArrayIndex > BACNET_PRIORITY_ARRAY_SIZE) {
         return false;
     }
-    *slotIsSet = c->isSet[propertyArrayIndex - 1];
-    *slotValue = c->value[propertyArrayIndex - 1];
+    *slotIsSet = commandable->isSet[propertyArrayIndex - 1];
+    *slotValue = commandable->value[propertyArrayIndex - 1];
     return true;
+}
+
+// -----------------------------------------------------------------------------
+// 1b. The Lighting Output engine - real BACnet behaviour (cl. 12.54)
+//
+// Everything a client can observe about HOW the light gets to its level lives
+// here: Tracking_Value, In_Progress, Egress_Active, Last_On_Value, and the
+// Priority_Array writes that fades, steps and warns make over time.
+//
+//   Present_Value  = the TARGET (the stack resolves it from the Priority_Array).
+//   Tracking_Value = "the value at which the physical lighting output is being
+//                    controlled ... at all times" (cl. 12.54.5). Equal to
+//                    Present_Value whenever In_Progress is IDLE; mid-fade or
+//                    mid-ramp it is "the current calculated value of the ramp or
+//                    fade algorithm".
+//
+// "There may only be one lighting command currently in progress at any time"
+// (cl. 12.54.6.1), so one struct holds it: a fade, a ramp, or a warn's egress
+// timer, and the priority slot it belongs to.
+//
+// ON REAL HARDWARE: keep this engine. Replace only section 1c (the Simulation),
+// and feed Tracking_Value to your dimming driver instead of a printf.
+// -----------------------------------------------------------------------------
+enum class CommandInProgress {
+    None,             // nothing running: Tracking_Value == Present_Value
+    Fade,             // FADE_TO: proportional over a fade time
+    Ramp,             // RAMP_TO: fixed rate in percent per second
+    EgressRelinquish, // WARN_RELINQUISH: hold for Egress_Time, then relinquish
+    EgressOff         // WARN_OFF: hold for Egress_Time, then write 0.0%
+};
+
+struct LightingEngine {
+    float trackingValue;               // Tracking_Value
+    CommandInProgress command;         // what is running, if anything
+    uint8_t commandPriority;           // the Priority_Array slot it belongs to
+    float startLevel;                  // fade/ramp: Tracking_Value when it began
+    float targetLevel;                 // fade/ramp: where it is going
+    uint64_t startMilliseconds;        // fade/ramp: when it began
+    uint32_t fadeTimeMilliseconds;     // fade: how long it takes
+    float rampRatePercentPerSecond;    // ramp: how fast it moves
+    uint64_t egressDeadlineMilliseconds; // warn: when the egress time runs out
+    float lastOnValue;                 // Last_On_Value (cl. 12.54.44)
+};
+// Last_On_Value is 100.0 until Present_Value has ever been >= 1.0 (cl. 12.54.44).
+static LightingEngine g_engine = { 0.0f, CommandInProgress::None, 0, 0.0f, 0.0f, 0, 0, 0.0f, 0, 100.0f };
+
+// A monotonic millisecond clock: fades must not jump when the wall clock is set
+// (a TimeSynchronization is exactly the kind of thing that sets it).
+static uint64_t NowMilliseconds() {
+    return (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+// In_Progress (cl. 12.54.7, Table 12-68). A warn's egress time is NOT one of the
+// listed processes: during it the light is held at Present_Value, so it is IDLE.
+static uint32_t LightingInProgress() {
+    switch (g_engine.command) {
+        case CommandInProgress::Fade: return LIGHTING_IN_PROGRESS_FADE_ACTIVE;
+        case CommandInProgress::Ramp: return LIGHTING_IN_PROGRESS_RAMP_ACTIVE;
+        default:                      return LIGHTING_IN_PROGRESS_IDLE;
+    }
+}
+
+// Egress_Active (cl. 12.54.15): TRUE while a warnRelinquish / warnOff egress
+// timer is running.
+static bool LightingEgressActive() {
+    return g_engine.command == CommandInProgress::EgressRelinquish ||
+           g_engine.command == CommandInProgress::EgressOff;
+}
+
+// Last_On_Value: "the last value of the Present_Value property that was greater
+// than or equal to 1.0%" (cl. 12.54.44). Called after every change.
+static void UpdateLastOnValue() {
+    const float presentValue = ResolvePresentValue(&g_lightingOutput);
+    if (presentValue >= LIGHTING_LEVEL_DIMMEST) {
+        g_engine.lastOnValue = presentValue;
+    }
+}
+
+// Present_Value writes "at a value greater than 0.0% but less than 1.0% shall be
+// clamped to 1.0%" (cl. 12.54.4). Lighting commands that write a level go through
+// the same Present_Value, so they are clamped the same way.
+static float ClampToDimmest(float level) {
+    return (level > LIGHTING_LEVEL_MIN && level < LIGHTING_LEVEL_DIMMEST) ? LIGHTING_LEVEL_DIMMEST : level;
+}
+
+// Write a level at a priority slot and keep Last_On_Value current.
+static void WriteLightingLevel(uint8_t priority, float level) {
+    CommandWrite(&g_lightingOutput, priority, (double)ClampToDimmest(level));
+    UpdateLastOnValue();
+}
+
+// Halt the command in progress, with the effect cl. 12.54.6.1 gives each kind:
+//   "When a RAMP_TO or FADE_TO command that is currently in progress is halted, the
+//    internal ramp or fade algorithm is halted, and the corresponding slot in the
+//    priority array remains unchanged."
+//   "When a WARN_RELINQUISH command that is currently in progress is halted, the
+//    blink-warn egress timer is immediately expired, and the corresponding value of
+//    the priority array is relinquished."
+//   "When a WARN_OFF command that is currently in progress is halted, the egress
+//    timer is immediately expired, and the value 0.0% is written to the priority
+//    array at the specified priority."
+static void HaltCommandInProgress(const char* reason) {
+    switch (g_engine.command) {
+        case CommandInProgress::Fade:
+        case CommandInProgress::Ramp:
+            printf("Lighting: %s at priority %u halted at %.1f%% (%s)\n",
+                   g_engine.command == CommandInProgress::Fade ? "fade" : "ramp",
+                   g_engine.commandPriority, g_engine.trackingValue, reason);
+            break;
+        case CommandInProgress::EgressRelinquish:
+            CommandRelinquish(&g_lightingOutput, g_engine.commandPriority);
+            printf("Lighting: egress timer at priority %u expired early - relinquished (%s)\n",
+                   g_engine.commandPriority, reason);
+            break;
+        case CommandInProgress::EgressOff:
+            WriteLightingLevel(g_engine.commandPriority, 0.0f);
+            printf("Lighting: egress timer at priority %u expired early - 0.0%% written (%s)\n",
+                   g_engine.commandPriority, reason);
+            break;
+        case CommandInProgress::None:
+        default:
+            return;
+    }
+    g_engine.command = CommandInProgress::None;
+    UpdateLastOnValue();
+}
+
+// A write at `writePriority` halts the command in progress when it is at a higher
+// priority (cl. 12.54.6.1 (a) and (b)) or at the same priority ("A lighting command
+// that is in progress is implicitly halted when it is overwritten by another
+// lighting command at the same priority or by a write to the Present_Value at the
+// same priority"). A lower-priority write leaves it running.
+static void HaltIfWriteOverrides(uint8_t writePriority, const char* reason) {
+    if (g_engine.command != CommandInProgress::None && writePriority <= g_engine.commandPriority) {
+        HaltCommandInProgress(reason);
+    }
+}
+
+// Begin a fade or ramp from the current Tracking_Value to `targetLevel`.
+static void StartTransition(CommandInProgress kind, uint8_t priority, float targetLevel,
+                            uint32_t fadeTimeMilliseconds, float rampRatePercentPerSecond) {
+    g_engine.command = kind;
+    g_engine.commandPriority = priority;
+    g_engine.startLevel = g_engine.trackingValue;
+    g_engine.targetLevel = targetLevel;
+    g_engine.startMilliseconds = NowMilliseconds();
+    g_engine.fadeTimeMilliseconds = fadeTimeMilliseconds;
+    g_engine.rampRatePercentPerSecond = rampRatePercentPerSecond;
+}
+
+// Begin a warnRelinquish / warnOff egress timer of Egress_Time seconds.
+static void StartEgress(CommandInProgress kind, uint8_t priority) {
+    g_engine.command = kind;
+    g_engine.commandPriority = priority;
+    g_engine.egressDeadlineMilliseconds = NowMilliseconds() + (uint64_t)g_egressTime * 1000;
+}
+
+// Forward declaration - the Simulation's blink lives in section 1c.
+static void SimulationBlinkWarn(uint8_t priority);
+
+// Run one lighting operation of Table 12-67 at `priority`. Shared by
+// Lighting_Command writes (section 2c) and the Present_Value special values of
+// Table 12-65 (section 2b), which "has the same effect as writing the
+// corresponding lighting command". The command's parameters arrive already
+// resolved (an omitted fade-time is Default_Fade_Time, and so on) and range
+// checked. Returns false, with *errorCode, for an operation that must be refused.
+static bool ExecuteLightingOperation(uint32_t operation, uint8_t priority, float targetLevel,
+                                     uint32_t fadeTimeMilliseconds, float rampRatePercentPerSecond,
+                                     float stepIncrement, uint32_t* errorCode) {
+    if (operation == LIGHTING_OPERATION_NONE || operation > LIGHTING_OPERATION_TOGGLE_DEFAULT) {
+        // NONE: "This operation shall not be written to the Lighting_Command
+        // property. Attempts to write this operation ... shall cause a Result(-) ...
+        // PROPERTY ... VALUE_OUT_OF_RANGE". Proprietary operations (256 and up) are
+        // not implemented by this device, so it refuses them the same way.
+        *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
+        return false;
+    }
+
+    if (operation == LIGHTING_OPERATION_STOP) {
+        // STOP "Stops any FADE_TO or RAMP_TO command in progress at the specified
+        // priority and writes the current value of Tracking_Value to that slot in the
+        // priority array and sets In_Progress to IDLE. Cancels any WARN_RELINQUISH or
+        // WARN_OFF command in progress at the specified priority and cancels the
+        // blink-warn egress timer. The value in the priority array at the specified
+        // priority remains unchanged. If there is no fade, ramp, or warn command
+        // currently executing at the specified priority, then this operation is
+        // ignored." STOP is the one command that does NOT halt by priority (cl.
+        // 12.54.6.1 (a) says "other than STOP").
+        if (g_engine.command == CommandInProgress::None || g_engine.commandPriority != priority) {
+            printf("Lighting_Command: stop @ priority %u - nothing running at that priority, ignored\n", priority);
+            return true;
+        }
+        if (g_engine.command == CommandInProgress::Fade || g_engine.command == CommandInProgress::Ramp) {
+            WriteLightingLevel(priority, g_engine.trackingValue);
+            printf("Lighting_Command: stop @ priority %u - held at %.1f%%\n", priority, g_engine.trackingValue);
+        } else {
+            printf("Lighting_Command: stop @ priority %u - egress timer cancelled, level unchanged\n", priority);
+        }
+        g_engine.command = CommandInProgress::None;
+        return true;
+    }
+
+    // Every other valid command halts a command in progress at a lower or equal
+    // priority (cl. 12.54.6.1 (a), and the implicit same-priority halt).
+    HaltIfWriteOverrides(priority, LightingOperationName(operation));
+
+    const float trackingValue = g_engine.trackingValue;
+    const float presentValue = ResolvePresentValue(&g_lightingOutput);
+    switch (operation) {
+        case LIGHTING_OPERATION_FADE_TO:
+        case LIGHTING_OPERATION_RAMP_TO: {
+            // "The fade operation is implemented by first writing target-level to the
+            // specified slot in the priority array then reevaluating the priority
+            // array. After the reevaluation of the priority array, if the provided
+            // priority is not the current command priority, this fade operation shall
+            // not be executed. Otherwise, the fade operation continues by changing the
+            // physical lighting output proportionally from its current value to
+            // target-level, over a period of time defined by fade-time."
+            //
+            // RAMP_TO's row is written the same way but reads "if the provided
+            // priority is NOT the current command priority, then the ramp operation
+            // continues" - which would ramp the light while a higher priority holds
+            // it, contradicting Present_Value's own rule (a ramp's target is the
+            // level the light is going to). This example treats RAMP_TO exactly as
+            // FADE_TO's row does.
+            const bool isFade = (operation == LIGHTING_OPERATION_FADE_TO);
+            WriteLightingLevel(priority, targetLevel);
+            const float target = ClampToDimmest(targetLevel);
+            if (CurrentCommandPriority(&g_lightingOutput) != priority) {
+                printf("Lighting_Command: %s %.1f%% @ priority %u - written to the slot, not executed "
+                       "(priority %u is in control)\n", LightingOperationName(operation), target, priority,
+                       CurrentCommandPriority(&g_lightingOutput));
+                break;
+            }
+            StartTransition(isFade ? CommandInProgress::Fade : CommandInProgress::Ramp, priority, target,
+                            fadeTimeMilliseconds, rampRatePercentPerSecond);
+            if (isFade) {
+                printf("Lighting_Command: fadeTo %.1f%% over %u ms @ priority %u (from %.1f%%)\n",
+                       target, fadeTimeMilliseconds, priority, trackingValue);
+            } else {
+                printf("Lighting_Command: rampTo %.1f%% at %.1f%%/s @ priority %u (from %.1f%%)\n",
+                       target, rampRatePercentPerSecond, priority, trackingValue);
+            }
+            break;
+        }
+        case LIGHTING_OPERATION_STEP_UP:
+        case LIGHTING_OPERATION_STEP_ON: {
+            // STEP_UP: "writing the Tracking_Value plus step-increment to the specified
+            // slot ... If the result of the addition is greater than 100.0%, the value
+            // shall be set to 100.0%. If the starting level of Tracking_Value is 0.0%,
+            // then this operation is ignored." STEP_ON: "Same as STEP_UP except when
+            // Tracking_Value is 0.0%, in which case, 1.0% is written".
+            if (trackingValue <= LIGHTING_LEVEL_MIN) {
+                if (operation == LIGHTING_OPERATION_STEP_ON) {
+                    WriteLightingLevel(priority, LIGHTING_LEVEL_DIMMEST);
+                    printf("Lighting_Command: stepOn from off -> 1.0%% @ priority %u\n", priority);
+                } else {
+                    printf("Lighting_Command: stepUp ignored - the light is off\n");
+                }
+                break;
+            }
+            float next = trackingValue + stepIncrement;
+            if (next > LIGHTING_LEVEL_MAX) { next = LIGHTING_LEVEL_MAX; }
+            WriteLightingLevel(priority, next);
+            printf("Lighting_Command: %s %.1f%% -> %.1f%% @ priority %u\n",
+                   LightingOperationName(operation), stepIncrement, next, priority);
+            break;
+        }
+        case LIGHTING_OPERATION_STEP_DOWN:
+        case LIGHTING_OPERATION_STEP_OFF: {
+            // STEP_DOWN: "writing the Tracking_Value minus step-increment ... If the
+            // result of the subtraction is less than 1.0%, the value shall be set to
+            // 1.0%. If the starting level of Tracking_Value is 0.0%, then this
+            // operation is ignored." STEP_OFF: "Same as STEP_DOWN except when
+            // Tracking_Value is 1.0%, in which case, 0.0% is written".
+            if (trackingValue <= LIGHTING_LEVEL_MIN) {
+                printf("Lighting_Command: %s ignored - the light is off\n", LightingOperationName(operation));
+                break;
+            }
+            if (operation == LIGHTING_OPERATION_STEP_OFF && fabsf(trackingValue - LIGHTING_LEVEL_DIMMEST) < 0.001f) {
+                WriteLightingLevel(priority, 0.0f);
+                printf("Lighting_Command: stepOff from 1.0%% -> off @ priority %u\n", priority);
+                break;
+            }
+            float next = trackingValue - stepIncrement;
+            if (next < LIGHTING_LEVEL_DIMMEST) { next = LIGHTING_LEVEL_DIMMEST; }
+            WriteLightingLevel(priority, next);
+            printf("Lighting_Command: %s %.1f%% -> %.1f%% @ priority %u\n",
+                   LightingOperationName(operation), stepIncrement, next, priority);
+            break;
+        }
+        case LIGHTING_OPERATION_WARN:
+            // "The blink-warn notification shall only occur if Blink_Warn_Enable is
+            // TRUE, the Present_Value is not 0.0%, and the specified priority is the
+            // current command priority." The level is unchanged either way.
+            if (LIGHTING_BLINK_WARN_ENABLE && presentValue != 0.0f &&
+                CurrentCommandPriority(&g_lightingOutput) == priority) {
+                SimulationBlinkWarn(priority);
+            } else {
+                printf("Lighting_Command: warn @ priority %u - no blink (off, or not in control)\n", priority);
+            }
+            break;
+        case LIGHTING_OPERATION_WARN_RELINQUISH:
+            // "The blink-warn notification shall not occur, and the value at the
+            // specified priority shall be relinquished immediately if any of the
+            // following conditions occur: (a) Blink_Warn_Enable is FALSE, or (b) The
+            // Present_Value is 0.0%, or (c) The Present_Value would not evaluate to
+            // 0.0% after the priority slot is relinquished."
+            if (!LIGHTING_BLINK_WARN_ENABLE || presentValue == 0.0f ||
+                ResolvePresentValue(&g_lightingOutput, priority) != 0.0f) {
+                CommandRelinquish(&g_lightingOutput, priority);
+                UpdateLastOnValue();
+                printf("Lighting_Command: warnRelinquish @ priority %u - relinquished at once\n", priority);
+                break;
+            }
+            SimulationBlinkWarn(priority);
+            StartEgress(CommandInProgress::EgressRelinquish, priority);
+            printf("Lighting_Command: warnRelinquish @ priority %u - holding %.1f%% for %u s (Egress_Active)\n",
+                   priority, presentValue, g_egressTime);
+            break;
+        case LIGHTING_OPERATION_WARN_OFF:
+            // "The blink-warn notification shall not occur and the value 0.0% shall be
+            // written at the specified priority immediately if any of the following
+            // conditions occur: (a) Blink_Warn_Enable is FALSE, or (b) The
+            // Present_Value is 0.0%, or (c) The specified priority is not the current
+            // command priority."
+            if (!LIGHTING_BLINK_WARN_ENABLE || presentValue == 0.0f ||
+                CurrentCommandPriority(&g_lightingOutput) != priority) {
+                WriteLightingLevel(priority, 0.0f);
+                printf("Lighting_Command: warnOff @ priority %u - 0.0%% written at once\n", priority);
+                break;
+            }
+            SimulationBlinkWarn(priority);
+            StartEgress(CommandInProgress::EgressOff, priority);
+            printf("Lighting_Command: warnOff @ priority %u - holding %.1f%% for %u s (Egress_Active)\n",
+                   priority, presentValue, g_egressTime);
+            break;
+        case LIGHTING_OPERATION_RESTORE_ON:
+            // "writing the Last_On_Value to the specified slot in the priority array."
+            WriteLightingLevel(priority, g_engine.lastOnValue);
+            printf("Lighting_Command: restoreOn -> %.1f%% @ priority %u\n", g_engine.lastOnValue, priority);
+            break;
+        case LIGHTING_OPERATION_DEFAULT_ON:
+            // "writing the Default_On_Value to the specified slot in the priority array."
+            WriteLightingLevel(priority, LIGHTING_DEFAULT_ON_VALUE);
+            printf("Lighting_Command: defaultOn -> %.1f%% @ priority %u\n", LIGHTING_DEFAULT_ON_VALUE, priority);
+            break;
+        case LIGHTING_OPERATION_TOGGLE_RESTORE:
+        case LIGHTING_OPERATION_TOGGLE_DEFAULT: {
+            // "If the priority is numerically higher than the current command priority,
+            // then the command shall be considered successful, but the content of the
+            // priority array shall not be modified." Otherwise off -> on (Last_On_Value
+            // or Default_On_Value), on -> 0.0%. With every slot null, Relinquish_Default
+            // is in control and any priority 1..16 is numerically lower than "17".
+            const uint8_t controllingPriority = CurrentCommandPriority(&g_lightingOutput);
+            if (controllingPriority != 0 && priority > controllingPriority) {
+                printf("Lighting_Command: %s @ priority %u - priority %u is in control, no change\n",
+                       LightingOperationName(operation), priority, controllingPriority);
+                break;
+            }
+            const float onLevel = (operation == LIGHTING_OPERATION_TOGGLE_RESTORE) ? g_engine.lastOnValue
+                                                                                   : LIGHTING_DEFAULT_ON_VALUE;
+            const float next = (presentValue == 0.0f) ? onLevel : 0.0f;
+            WriteLightingLevel(priority, next);
+            printf("Lighting_Command: %s -> %.1f%% @ priority %u\n", LightingOperationName(operation), next, priority);
+            break;
+        }
+        default:
+            break;
+    }
+    return true;
+}
+
+// Advance the engine. Called from the main loop on every pass (every ~1 ms), so a
+// fade moves smoothly; a slower tick only makes the steps coarser.
+static void LightingTick() {
+    const uint64_t now = NowMilliseconds();
+
+    // A fade or ramp always belongs to the priority in control: every write that
+    // could take control away from it halts it first (HaltIfWriteOverrides), as
+    // cl. 12.54.6.1 requires. A new code path that writes the Priority_Array must
+    // do the same.
+
+    if (g_engine.command == CommandInProgress::Fade) {
+        // "changing the physical lighting output proportionally from its current value
+        // to target-level, over a period of time defined by fade-time."
+        const uint64_t elapsed = now - g_engine.startMilliseconds;
+        if (elapsed >= g_engine.fadeTimeMilliseconds) {
+            g_engine.trackingValue = g_engine.targetLevel;
+            g_engine.command = CommandInProgress::None;
+            printf("Lighting: fade arrived at %.1f%%\n", g_engine.targetLevel);
+        } else {
+            const float fraction = (float)elapsed / (float)g_engine.fadeTimeMilliseconds;
+            g_engine.trackingValue = g_engine.startLevel + (g_engine.targetLevel - g_engine.startLevel) * fraction;
+        }
+    } else if (g_engine.command == CommandInProgress::Ramp) {
+        // "changing the physical lighting output proportionally from its current value
+        // to target-level, with a fixed rate of change defined by ramp-rate."
+        const float moved = g_engine.rampRatePercentPerSecond * (float)(now - g_engine.startMilliseconds) / 1000.0f;
+        const float distance = fabsf(g_engine.targetLevel - g_engine.startLevel);
+        if (moved >= distance) {
+            g_engine.trackingValue = g_engine.targetLevel;
+            g_engine.command = CommandInProgress::None;
+            printf("Lighting: ramp arrived at %.1f%%\n", g_engine.targetLevel);
+        } else {
+            g_engine.trackingValue = g_engine.startLevel +
+                (g_engine.targetLevel > g_engine.startLevel ? moved : -moved);
+        }
+    } else if (LightingEgressActive() && now >= g_engine.egressDeadlineMilliseconds) {
+        // "When the egress timer expires ... Egress_Active shall be set to FALSE", and
+        // the warn's effect happens: relinquish (WARN_RELINQUISH) or 0.0% (WARN_OFF).
+        if (g_engine.command == CommandInProgress::EgressRelinquish) {
+            CommandRelinquish(&g_lightingOutput, g_engine.commandPriority);
+            printf("Lighting: egress time over - priority %u relinquished\n", g_engine.commandPriority);
+        } else {
+            WriteLightingLevel(g_engine.commandPriority, 0.0f);
+            printf("Lighting: egress time over - 0.0%% written at priority %u\n", g_engine.commandPriority);
+        }
+        g_engine.command = CommandInProgress::None;
+    }
+
+    // "When the value of In_Progress is IDLE, Tracking_Value shall be equal to
+    // Present_Value" (cl. 12.54.5). This object has no Transition property, so a
+    // relinquish or direct write takes effect at once (cl. 12.54.19: "If this
+    // property does not exist, then the transition type shall be assumed to be NONE").
+    if (LightingInProgress() == LIGHTING_IN_PROGRESS_IDLE) {
+        g_engine.trackingValue = ResolvePresentValue(&g_lightingOutput);
+    }
+    UpdateLastOnValue();
+}
+
+// -----------------------------------------------------------------------------
+// 1c. SIMULATION - the lamp and its dimming driver
+//
+// Not BACnet. On a PC there is no lamp, so these lines stand in for one: the
+// driver output follows Tracking_Value, a blink-warn prints a blink, and the lamp
+// can burn out. ON REAL HARDWARE: delete this section, drive your dimming hardware
+// from g_engine.trackingValue, and set g_lampFailed from your driver's
+// open-lamp / lamp-failure detection.
+//
+// TEST-ONLY HOOK: when the environment variable BLD_TEST_LAMP_BURNS_OUT is set to
+// 1, the simulated lamp burns out the first time the driver turns it on. The
+// example's lamp-failure detection then reports Reliability LAMP_FAILURE, which
+// sets the FAULT flag of Status_Flags (cl. 12.54.9, 12.54.11). It is not a command
+// line option and changes nothing on the BACnet surface; it exists so a Wire Test
+// can show the Failure Mode without a real lamp to break.
+// -----------------------------------------------------------------------------
+static bool g_testLampBurnsOut = false;   // BLD_TEST_LAMP_BURNS_OUT=1 (read in main())
+static bool g_lampFailed = false;         // the driver's lamp-failure detection
+static float g_driverLevel = 0.0f;        // what the simulated driver is outputting
+
+static void SimulationBlinkWarn(uint8_t priority) {
+    printf("Simulation: the lamp blinks (blink-warn at priority %u)\n", priority);
+}
+
+static void SimulationLampTick() {
+    if (g_driverLevel == g_engine.trackingValue) {
+        return;
+    }
+    g_driverLevel = g_engine.trackingValue;
+    if (g_testLampBurnsOut && !g_lampFailed && g_driverLevel > 0.0f) {
+        g_lampFailed = true;
+        printf("Simulation: the lamp burnt out as it was switched on (BLD_TEST_LAMP_BURNS_OUT) - "
+               "lamp-failure detected\n");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 1d. Out_Of_Service and Reliability (cl. 12.54.11, 12.54.12)
+//
+// Reliability reports what the lamp-failure detection sees. When a client sets
+// Out_Of_Service TRUE, Reliability is "decoupled from the physical output" and
+// becomes writable "to allow simulating specific conditions or for testing
+// purposes" (cl. 12.54.12 (b), (c)); Present_Value stays under the command
+// prioritization mechanism and Lighting_Command ((e)), so the engine above keeps
+// running.
+// -----------------------------------------------------------------------------
+static bool g_outOfService = false;
+static uint32_t g_reliabilityWhileOutOfService = RELIABILITY_NO_FAULT_DETECTED;
+
+static uint32_t LightingReliability() {
+    if (g_outOfService) {
+        return g_reliabilityWhileOutOfService;
+    }
+    return g_lampFailed ? RELIABILITY_LAMP_FAILURE : RELIABILITY_NO_FAULT_DETECTED;
 }
 
 // -----------------------------------------------------------------------------
@@ -424,28 +923,18 @@ static bool ReadPrioritySlot(const Commandable* c, uint32_t propertyIdentifier,
 //     Units       -> no-units (95)
 //     otherwise   -> a datatype zero-value
 //
-// ADDING AN OBJECT? READ THIS FIRST.
-// The consequence is the opposite of reassuring. These callbacks are not
-// uniformly strict:
-//   - GetPropertyReal / GetPropertyEnumerated / GetPropertyUnsignedInteger match
-//     on object type AND INSTANCE (directly, or via GetCommandable(), which
-//     looks up the exact type+instance pair). A new instance falls through every
-//     one of those checks.
-//   - GetPropertyBool serves Out_Of_Service on object TYPE ONLY, so a new
-//     instance of an existing type gets Out_Of_Service for free.
-// So a half-added object does NOT fail loudly. Its Present_Value errors (that
-// one is in the list above) - but its Object_Name reads back as "undefined" and
-// its Units as no-units, with no error at all. Add two objects that way and BOTH
-// report Object_Name "undefined": duplicate object names within one device, which
-// is a spec violation and a hard BTL failure, and which every scan tool will show
-// you as a healthy object. The device looks fine and is non-conformant.
+// ADDING AN OBJECT? READ THIS FIRST. A half-added object does NOT fail loudly.
+// Its Present_Value errors (that one is in the list above) - but its Object_Name
+// reads back as "undefined" with no error at all. Add two objects that way and
+// BOTH report Object_Name "undefined": duplicate object names within one device,
+// which is a spec violation and a hard BTL failure, and which every scan tool
+// will show you as a healthy object.
 //
 // So: when you add an instance, walk EVERY callback below, then read back every
-// required property of the new object and DIFF IT against the existing one. Do
-// not trust "it scanned OK" - that is exactly the failure mode.
+// required property of the new object (tests/discovery_test.py does exactly that).
 // -----------------------------------------------------------------------------
 
-// REAL (floating point) - the Analog Input's Present_Value.
+// REAL (floating point) - the Lighting Output's levels and rates.
 bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
                      float* value, const bool useArrayIndex,
@@ -457,32 +946,16 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
-    if (objectType == OBJECT_TYPE_ANALOG_INPUT &&
-        objectInstance == ANALOG_INPUT_INSTANCE &&
-        propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-        // ON REAL HARDWARE: return the live sensor reading here. Read it from a
-        // cached variable that your hardware updates (as g_analogInput1Value is),
-        // NOT directly from a slow/blocking device (I2C, SPI, ADC conversion):
-        // this callback runs on the BACnetStack_Tick() thread, so blocking it
-        // delays all BACnet processing. Sample the sensor on a timer/another
-        // thread and just hand back the latest value from here.
-        *value = g_analogInput1Value;
-        return true;
-    }
-    // Analog Output (commandable): serve its Priority_Array slots and
+    // Commandable Present_Value: serve the Priority_Array slots and
     // Relinquish_Default. The stack reads each slot to compute Present_Value and
-    // to answer a ReadProperty of the whole array. For a null (relinquished) slot
-    // we return false - the stack then takes the "slot is null" answer from
-    // GetPropertyBool below.
-    const Commandable* c = GetCommandable(objectType, objectInstance);
-    // Both the Analog Output and the Lighting Output carry a REAL Present_Value, so
-    // both serve their Priority_Array slots + Relinquish_Default through this one
-    // callback - the commandable mechanism does not care what the object is.
-    if (c != NULL && (objectType == OBJECT_TYPE_ANALOG_OUTPUT ||
-                      objectType == OBJECT_TYPE_LIGHTING_OUTPUT)) {
+    // Current_Command_Priority and to answer a ReadProperty of the whole array. For
+    // a null (relinquished) slot we return false - the stack then takes the "slot
+    // is null" answer from GetPropertyBool below.
+    const Commandable* commandable = GetCommandable(objectType, objectInstance);
+    if (commandable != NULL) {
         bool slotIsSet = false;
         double slotValue = 0.0;
-        if (ReadPrioritySlot(c, propertyIdentifier, useArrayIndex, propertyArrayIndex,
+        if (ReadPrioritySlot(commandable, propertyIdentifier, useArrayIndex, propertyArrayIndex,
                              &slotIsSet, &slotValue)) {
             if (!slotIsSet) {
                 return false;
@@ -491,7 +964,7 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
             return true;
         }
         if (propertyIdentifier == PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT) {
-            *value = (float)c->relinquishDefault;
+            *value = (float)commandable->relinquishDefault;
             return true;
         }
     }
@@ -500,17 +973,22 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
     if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && objectInstance == LIGHTING_OUTPUT_INSTANCE) {
         switch (propertyIdentifier) {
             case PROPERTY_IDENTIFIER_TRACKING_VALUE:
-                // Tracking_Value is what the light ACTUALLY is, as opposed to what it
-                // was commanded to be (Present_Value). They differ mid-fade on real
-                // hardware. This example completes commands instantly, so they agree -
-                // a real driver would report its measured//live level here.
-                *value = ResolveLightingLevel(&g_lightingOutput);
+                // What the light is being driven at right now (section 1b). It
+                // differs from Present_Value (the target) while In_Progress is
+                // FADE_ACTIVE or RAMP_ACTIVE.
+                *value = g_engine.trackingValue;
                 return true;
             case PROPERTY_IDENTIFIER_DEFAULT_RAMP_RATE:
-                *value = LIGHTING_DEFAULT_RAMP_RATE;
+                *value = g_defaultRampRate;
                 return true;
             case PROPERTY_IDENTIFIER_DEFAULT_STEP_INCREMENT:
-                *value = LIGHTING_DEFAULT_STEP_INCREMENT;
+                *value = g_defaultStepIncrement;
+                return true;
+            case PROPERTY_IDENTIFIER_LAST_ON_VALUE:
+                *value = g_engine.lastOnValue;
+                return true;
+            case PROPERTY_IDENTIFIER_DEFAULT_ON_VALUE:
+                *value = LIGHTING_DEFAULT_ON_VALUE;
                 return true;
             default:
                 break;
@@ -519,63 +997,17 @@ bool GetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
     return false;
 }
 
-// ENUMERATED - the Binary Input's Present_Value (0 = inactive, 1 = active) and
-// the Analog Input's Units (degrees Celsius).
+// ENUMERATED - the Lighting Output's In_Progress and Reliability, and the
+// Network Port's BACnet/IP mode.
 bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectType,
                            const uint32_t objectInstance, const uint32_t propertyIdentifier,
                            uint32_t* value, const bool useArrayIndex,
                            const uint32_t propertyArrayIndex, uint32_t* errorCode) {
+    (void)useArrayIndex;
+    (void)propertyArrayIndex;
     (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
-    }
-    if (objectType == OBJECT_TYPE_BINARY_INPUT &&
-        objectInstance == BINARY_INPUT_INSTANCE) {
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-            *value = 1; // active
-            return true;
-        }
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_POLARITY) {
-            *value = POLARITY_NORMAL; // required property of a Binary Input
-            return true;
-        }
-    }
-    // Binary Output (commandable): Present_Value is an enumerated active/inactive
-    // driven through the Priority_Array. Serve the array slots and Relinquish_Default
-    // (plus its required Polarity).
-    const Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && objectType == OBJECT_TYPE_BINARY_OUTPUT) {
-        bool slotIsSet = false;
-        double slotValue = 0.0;
-        if (ReadPrioritySlot(c, propertyIdentifier, useArrayIndex, propertyArrayIndex,
-                             &slotIsSet, &slotValue)) {
-            if (!slotIsSet) {
-                return false;
-            }
-            *value = (uint32_t)slotValue;
-            return true;
-        }
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT) {
-            *value = (uint32_t)c->relinquishDefault;
-            return true;
-        }
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_POLARITY) {
-            *value = POLARITY_NORMAL; // required property of a Binary Output
-            return true;
-        }
-    }
-    // Units is REQUIRED on an Analog Input AND on an Analog Output. Serve BOTH.
-    // If you only serve the input's, the output does not error - it silently
-    // reports no-units(95), because Units is not in the stack's
-    // valueShouldBeInitialized list and so falls through to a substituted default
-    // (see the note at the top of this section). A setpoint that reads back "no
-    // units" next to a degC sensor is the kind of thing nobody notices until
-    // commissioning.
-    if (propertyIdentifier == PROPERTY_IDENTIFIER_UNITS &&
-        ((objectType == OBJECT_TYPE_ANALOG_INPUT && objectInstance == ANALOG_INPUT_INSTANCE) ||
-         (objectType == OBJECT_TYPE_ANALOG_OUTPUT && objectInstance == ANALOG_OUTPUT_INSTANCE))) {
-        *value = ENGINEERING_UNITS_DEGREES_CELSIUS;
-        return true;
     }
     if (objectType == OBJECT_TYPE_NETWORK_PORT &&
         objectInstance == NETWORK_PORT_INSTANCE &&
@@ -584,50 +1016,37 @@ bool GetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectT
         return true;
     }
 
-    // --- The Lighting Output's REQUIRED enumerated properties ----------------
+    // --- The Lighting Output's enumerated properties --------------------------
     if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && objectInstance == LIGHTING_OUTPUT_INSTANCE) {
         if (propertyIdentifier == PROPERTY_IDENTIFIER_IN_PROGRESS) {
-            // What the light is doing right now: idle / fadeActive / rampActive.
-            // A real driver would report fadeActive while its hardware is moving and
-            // flip to idle on arrival; this example completes instantly, so idle.
-            *value = g_lightingInProgress;
+            // IDLE / FADE_ACTIVE / RAMP_ACTIVE, from the engine (section 1b).
+            *value = LightingInProgress();
+            return true;
+        }
+        if (propertyIdentifier == PROPERTY_IDENTIFIER_RELIABILITY) {
+            // Optional on a Lighting Output; enabled in main() so a burnt-out lamp
+            // can be reported. The stack derives Status_Flags' FAULT flag from it.
+            *value = LightingReliability();
             return true;
         }
         // NB: a Lighting Output has NO Units property (its level is a dimensionless
         // percent, and Units is not in the object's required or optional set), so
-        // there is deliberately no Units arm here - serving one would be dead code
-        // the stack never calls.
+        // there is deliberately no Units arm here.
     }
     return false;
 }
 
-// UNSIGNED INTEGER - the Multi-State Input's Present_Value, and the Device's
-// Vendor_Identifier (the stack also uses Vendor_Identifier to build I-Am).
+// UNSIGNED INTEGER - the Device's Vendor_Identifier (the stack also uses it to
+// build I-Am), the Network Port's numbers, and the Lighting Output's timings.
 bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t objectType,
                                 const uint32_t objectInstance, const uint32_t propertyIdentifier,
                                 uint32_t* value, const bool useArrayIndex,
                                 const uint32_t propertyArrayIndex, uint32_t* errorCode) {
+    (void)useArrayIndex;
+    (void)propertyArrayIndex;
     (void)errorCode;
     if (deviceInstance != g_deviceInstance) {
         return false;
-    }
-    if (objectType == OBJECT_TYPE_MULTI_STATE_INPUT &&
-        objectInstance == MULTI_STATE_INPUT_INSTANCE) {
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-            *value = 1; // state 1 (valid range is 1..Number_Of_States)
-            return true;
-        }
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_NUMBER_OF_STATES) {
-            *value = MULTI_STATE_INPUT_NUMBER_OF_STATES; // required property
-            return true;
-        }
-        // State_Text is an array. The stack asks for its LENGTH here (array
-        // index 0) before reading each element via GetPropertyCharString.
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_STATE_TEXT &&
-            useArrayIndex && propertyArrayIndex == 0) {
-            *value = MULTI_STATE_INPUT_NUMBER_OF_STATES;
-            return true;
-        }
     }
     if (objectType == OBJECT_TYPE_DEVICE && objectInstance == g_deviceInstance &&
         propertyIdentifier == PROPERTY_IDENTIFIER_VENDOR_IDENTIFIER) {
@@ -648,42 +1067,18 @@ bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
             return true;
         }
     }
-    // Multi-State Output (commandable): Present_Value is an unsigned state number
-    // driven through the Priority_Array. Serve the array slots, Relinquish_Default,
-    // and the required Number_Of_States.
-    const Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && objectType == OBJECT_TYPE_MULTI_STATE_OUTPUT) {
-        bool slotIsSet = false;
-        double slotValue = 0.0;
-        if (ReadPrioritySlot(c, propertyIdentifier, useArrayIndex, propertyArrayIndex,
-                             &slotIsSet, &slotValue)) {
-            if (!slotIsSet) {
-                return false;
-            }
-            *value = (uint32_t)slotValue;
-            return true;
-        }
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT) {
-            *value = (uint32_t)c->relinquishDefault;
-            return true;
-        }
-        if (propertyIdentifier == PROPERTY_IDENTIFIER_NUMBER_OF_STATES) {
-            *value = MULTI_STATE_OUTPUT_NUMBER_OF_STATES;
-            return true;
-        }
-    }
 
     // --- The Lighting Output's REQUIRED unsigned properties ------------------
     // These are the light's dimming defaults: what it does when a Lighting_Command
-    // names an operation but omits that operation's parameter (cl. 12.54.9). E.g. a
-    // fadeTo with no fade-time fades over Default_Fade_Time.
+    // names an operation but omits that operation's parameter (cl. 12.54.6 Table
+    // 12-66). E.g. a fadeTo with no fade-time fades over Default_Fade_Time.
     if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && objectInstance == LIGHTING_OUTPUT_INSTANCE) {
         switch (propertyIdentifier) {
             case PROPERTY_IDENTIFIER_DEFAULT_FADE_TIME:
-                *value = LIGHTING_DEFAULT_FADE_TIME; // milliseconds
+                *value = g_defaultFadeTime;  // milliseconds
                 return true;
             case PROPERTY_IDENTIFIER_EGRESS_TIME:
-                *value = LIGHTING_EGRESS_TIME;       // seconds - note: NOT milliseconds
+                *value = g_egressTime;       // seconds - note: NOT milliseconds
                 return true;
             case PROPERTY_IDENTIFIER_LIGHTING_COMMAND_DEFAULT_PRIORITY:
                 *value = LIGHTING_COMMAND_DEFAULT_PRIORITY;
@@ -695,9 +1090,8 @@ bool GetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
     return false;
 }
 
-// BOOLEAN - Out_Of_Service is a required property of every input object and of
-// the Network Port. This is a read-only sensor, so nothing is ever out of
-// service: always false.
+// BOOLEAN - Priority_Array "slot is null" answers, Out_Of_Service, and the
+// Lighting Output's blink-warn properties.
 bool GetPropertyBool(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
                      bool* value, const bool useArrayIndex,
@@ -706,45 +1100,39 @@ bool GetPropertyBool(const uint32_t deviceInstance, const uint16_t objectType,
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
-    // Commandable outputs: the stack asks "is this Priority_Array slot null?" with
-    // the boolean getter. Answer true (1) for a relinquished slot, false (0) for a
+    // Commandable Present_Value: the stack asks "is this Priority_Array slot null?"
+    // with the boolean getter. Answer true for a relinquished slot, false for a
     // commanded one. This is how the stack knows which slots to skip when computing
     // Present_Value and how it encodes the NULLs in a ReadProperty of the array.
-    const Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && propertyIdentifier == PROPERTY_IDENTIFIER_PRIORITY_ARRAY &&
+    const Commandable* commandable = GetCommandable(objectType, objectInstance);
+    if (commandable != NULL && propertyIdentifier == PROPERTY_IDENTIFIER_PRIORITY_ARRAY &&
         useArrayIndex && propertyArrayIndex >= 1 &&
         propertyArrayIndex <= BACNET_PRIORITY_ARRAY_SIZE) {
-        *value = !c->isSet[propertyArrayIndex - 1];
+        *value = !commandable->isSet[propertyArrayIndex - 1];
         return true;
     }
-    // Out_Of_Service is a required property of every input and output object and of
-    // the Network Port. This example never takes anything out of service: false.
-    if (propertyIdentifier == PROPERTY_IDENTIFIER_OUT_OF_SERVICE &&
-        (objectType == OBJECT_TYPE_ANALOG_INPUT ||
-         objectType == OBJECT_TYPE_BINARY_INPUT ||
-         objectType == OBJECT_TYPE_MULTI_STATE_INPUT ||
-         objectType == OBJECT_TYPE_ANALOG_OUTPUT ||
-         objectType == OBJECT_TYPE_BINARY_OUTPUT ||
-         objectType == OBJECT_TYPE_MULTI_STATE_OUTPUT ||
-         objectType == OBJECT_TYPE_LIGHTING_OUTPUT ||
-         objectType == OBJECT_TYPE_NETWORK_PORT)) {
-        *value = false;
-        return true;
+    if (propertyIdentifier == PROPERTY_IDENTIFIER_OUT_OF_SERVICE) {
+        if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && objectInstance == LIGHTING_OUTPUT_INSTANCE) {
+            *value = g_outOfService;  // writable - see section 1d
+            return true;
+        }
+        if (objectType == OBJECT_TYPE_NETWORK_PORT && objectInstance == NETWORK_PORT_INSTANCE) {
+            *value = false;
+            return true;
+        }
     }
 
     // --- The Lighting Output's REQUIRED boolean properties -------------------
     if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && objectInstance == LIGHTING_OUTPUT_INSTANCE) {
         if (propertyIdentifier == PROPERTY_IDENTIFIER_BLINK_WARN_ENABLE) {
             // Blink-warn is the "the lights are about to go out" flash that gives
-            // people Egress_Time to leave. Enabled here so the property is meaningful.
-            *value = true;
+            // people Egress_Time to leave.
+            *value = LIGHTING_BLINK_WARN_ENABLE;
             return true;
         }
         if (propertyIdentifier == PROPERTY_IDENTIFIER_EGRESS_ACTIVE) {
-            // True only while the egress timer is actually running (i.e. between a
-            // warn command and the lights going off). Nothing drives it in this
-            // example, so it is honestly false.
-            *value = false;
+            // TRUE only while a warnRelinquish / warnOff egress timer runs.
+            *value = LightingEgressActive();
             return true;
         }
     }
@@ -817,42 +1205,13 @@ bool GetPropertyCharString(const uint32_t deviceInstance, const uint16_t objectT
         return false;
     }
 
-    // State_Text (optional) - one label per state of the Multi-State Input. It is
-    // a BACnet array, so the stack asks for one element at a time by index
-    // (1..Number_Of_States). Present_Value 1 -> "On", 2 -> "Off", 3 -> "Auto".
-    if (objectType == OBJECT_TYPE_MULTI_STATE_INPUT &&
-        objectInstance == MULTI_STATE_INPUT_INSTANCE &&
-        propertyIdentifier == PROPERTY_IDENTIFIER_STATE_TEXT && useArrayIndex) {
-        static const char* const stateText[] = { "On", "Off", "Auto" };
-        if (propertyArrayIndex >= 1 && propertyArrayIndex <= MULTI_STATE_INPUT_NUMBER_OF_STATES) {
-            return ReturnCharacterString(stateText[propertyArrayIndex - 1], value,
-                                         valueElementCount, maxElementCount, encodingType);
-        }
-        return false;
-    }
+    (void)useArrayIndex;
+    (void)propertyArrayIndex;
 
     // Object_Name - the colour name for each object.
     if (propertyIdentifier == PROPERTY_IDENTIFIER_OBJECT_NAME) {
         if (objectType == OBJECT_TYPE_DEVICE && objectInstance == g_deviceInstance) {
             return ReturnCharacterString(DEVICE_NAME, value, valueElementCount, maxElementCount, encodingType);
-        }
-        if (objectType == OBJECT_TYPE_ANALOG_INPUT && objectInstance == ANALOG_INPUT_INSTANCE) {
-            return ReturnCharacterString("Bronze", value, valueElementCount, maxElementCount, encodingType);
-        }
-        if (objectType == OBJECT_TYPE_BINARY_INPUT && objectInstance == BINARY_INPUT_INSTANCE) {
-            return ReturnCharacterString("Emerald", value, valueElementCount, maxElementCount, encodingType);
-        }
-        if (objectType == OBJECT_TYPE_MULTI_STATE_INPUT && objectInstance == MULTI_STATE_INPUT_INSTANCE) {
-            return ReturnCharacterString("Hot Pink", value, valueElementCount, maxElementCount, encodingType);
-        }
-        if (objectType == OBJECT_TYPE_ANALOG_OUTPUT && objectInstance == ANALOG_OUTPUT_INSTANCE) {
-            return ReturnCharacterString("Chartreuse", value, valueElementCount, maxElementCount, encodingType);
-        }
-        if (objectType == OBJECT_TYPE_BINARY_OUTPUT && objectInstance == BINARY_OUTPUT_INSTANCE) {
-            return ReturnCharacterString("Fuchsia", value, valueElementCount, maxElementCount, encodingType);
-        }
-        if (objectType == OBJECT_TYPE_MULTI_STATE_OUTPUT && objectInstance == MULTI_STATE_OUTPUT_INSTANCE) {
-            return ReturnCharacterString("Indigo", value, valueElementCount, maxElementCount, encodingType);
         }
         if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && objectInstance == LIGHTING_OUTPUT_INSTANCE) {
             return ReturnCharacterString("Jade", value, valueElementCount, maxElementCount, encodingType);
@@ -885,20 +1244,37 @@ bool GetPropertyCharString(const uint32_t deviceInstance, const uint16_t objectT
 }
 
 // -----------------------------------------------------------------------------
-// 2b. Property "set" callbacks - the heart of B-SA (DS-WP-B)
+// 2b. Property "set" callbacks (DS-WP-B)
 //
-// The stack calls these when a client sends WriteProperty to a commandable
-// output's Present_Value. The value arrives already decoded into the matching
-// data type, together with the priority (1..16) the client wrote at. We store it
-// in the object's Priority_Array; the stack recomputes Present_Value from the
-// array on the next read. A WriteProperty of NULL relinquishes a slot and arrives
-// through SetPropertyNull instead.
+// The stack calls these when a client sends WriteProperty. The value arrives
+// already decoded into the matching data type, together with the priority (1..16)
+// for a commandable Present_Value. A WriteProperty of NULL relinquishes a slot and
+// arrives through SetPropertyNull instead.
 //
-// Return true when we accept the write; return false (optionally setting
-// *errorCode) to reject it, and the stack answers with a BACnet Error-PDU.
+// Return true when we accept the write; return false (setting *errorCode) to
+// reject it, and the stack answers with a BACnet Error-PDU.
 // -----------------------------------------------------------------------------
 
-// REAL write - Analog Output 1 (Chartreuse) Present_Value.
+// The Present_Value special values of Table 12-65: "-1.0 Provides the same
+// functionality as the WARN lighting command", -2.0 WARN_RELINQUISH, -3.0
+// WARN_OFF, -4.0 RESTORE_ON, -5.0 DEFAULT_ON, -6.0 TOGGLE_RESTORE, -7.0
+// TOGGLE_DEFAULT. They let a device that cannot write a BACnetLightingCommand -
+// a Schedule, say - still blink-warn the room. Returns NONE for any other value.
+static uint32_t SpecialValueOperation(float value) {
+    static const uint32_t operations[] = {
+        LIGHTING_OPERATION_WARN, LIGHTING_OPERATION_WARN_RELINQUISH, LIGHTING_OPERATION_WARN_OFF,
+        LIGHTING_OPERATION_RESTORE_ON, LIGHTING_OPERATION_DEFAULT_ON,
+        LIGHTING_OPERATION_TOGGLE_RESTORE, LIGHTING_OPERATION_TOGGLE_DEFAULT };
+    for (uint32_t specialIndex = 0; specialIndex < sizeof(operations) / sizeof(operations[0]); specialIndex++) {
+        if (value == -(float)(specialIndex + 1)) {
+            return operations[specialIndex];
+        }
+    }
+    return LIGHTING_OPERATION_NONE;
+}
+
+// REAL write - Lighting Output Present_Value, Default_Ramp_Rate and
+// Default_Step_Increment.
 bool SetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
                      const float value, const bool useArrayIndex,
@@ -906,62 +1282,59 @@ bool SetPropertyReal(const uint32_t deviceInstance, const uint16_t objectType,
                      uint32_t* errorCode) {
     (void)useArrayIndex;
     (void)propertyArrayIndex;
-    if (deviceInstance != g_deviceInstance) {
+    if (deviceInstance != g_deviceInstance || objectType != OBJECT_TYPE_LIGHTING_OUTPUT ||
+        objectInstance != LIGHTING_OUTPUT_INSTANCE) {
         return false;
     }
-    Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE &&
-        (objectType == OBJECT_TYPE_ANALOG_OUTPUT || objectType == OBJECT_TYPE_LIGHTING_OUTPUT)) {
-        // Both the Analog Output and the Lighting Output carry a commandable REAL
-        // Present_Value, so both accept a direct write here - the same way
-        // GetPropertyReal serves both. A Lighting Output's Present_Value is a
-        // light LEVEL in percent, so unlike the Analog Output we DO bound it to
-        // 0..100 (an Analog Output would only reject out-of-band values if it
-        // modelled the optional Min_Pres_Value / Max_Pres_Value properties).
-        if (objectType == OBJECT_TYPE_LIGHTING_OUTPUT && (value < 0.0f || value > 100.0f)) {
+    if (propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
+        const uint8_t writePriority = EffectivePriority(priority);
+        // A special value runs its lighting command; "The special value itself is
+        // not written to the priority array" (cl. 12.54.4).
+        const uint32_t specialOperation = SpecialValueOperation(value);
+        if (specialOperation != LIGHTING_OPERATION_NONE) {
+            printf("WriteProperty: Lighting Output %u Present_Value special value %.1f = %s @ priority %u\n",
+                   objectInstance, value, LightingOperationName(specialOperation), writePriority);
+            return ExecuteLightingOperation(specialOperation, writePriority, 0.0f, g_defaultFadeTime,
+                                            g_defaultRampRate, g_defaultStepIncrement, errorCode);
+        }
+        // "The valid range of values for the Present_Value is 0.0% to 100.0%" and
+        // "Writes to Present_Value of values outside of the valid range of values
+        // shall cause a Result(-) to be returned with an 'Error Class' of PROPERTY
+        // and an 'Error Code' of VALUE_OUT_OF_RANGE" (cl. 12.54.4). Written as
+        // !(in range) so a NaN is refused too.
+        if (!(value >= LIGHTING_LEVEL_MIN && value <= LIGHTING_LEVEL_MAX)) {
             *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
             return false;
         }
-        CommandWrite(c, priority, (double)value);
-        const char* label = (objectType == OBJECT_TYPE_LIGHTING_OUTPUT)
-                                ? "Lighting Output" : "Analog Output";
-        printf("WriteProperty: %s %u <- %.2f @ priority %u\n",
-               label, objectInstance, value, EffectivePriority(priority));
+        // "If a lighting command is currently in progress and the Present_Value is
+        // written at a higher or equal priority, the lighting command shall be
+        // halted" (cl. 12.54.4).
+        HaltIfWriteOverrides(writePriority, "Present_Value written");
+        WriteLightingLevel(writePriority, value);
+        printf("WriteProperty: Lighting Output %u Present_Value <- %.2f @ priority %u\n",
+               objectInstance, ClampToDimmest(value), writePriority);
+        return true;
+    }
+    if (propertyIdentifier == PROPERTY_IDENTIFIER_DEFAULT_RAMP_RATE ||
+        propertyIdentifier == PROPERTY_IDENTIFIER_DEFAULT_STEP_INCREMENT) {
+        // cl. 12.54.17 / 12.54.18: 0.1 to 100.0 inclusive; "Values written outside
+        // of the allowable range shall cause a Result(-) ... VALUE_OUT_OF_RANGE."
+        const bool isRampRate = (propertyIdentifier == PROPERTY_IDENTIFIER_DEFAULT_RAMP_RATE);
+        const float minimum = isRampRate ? LIGHTING_RAMP_RATE_MIN : LIGHTING_STEP_INCREMENT_MIN;
+        const float maximum = isRampRate ? LIGHTING_RAMP_RATE_MAX : LIGHTING_STEP_INCREMENT_MAX;
+        if (!(value >= minimum && value <= maximum)) {
+            *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
+            return false;
+        }
+        (isRampRate ? g_defaultRampRate : g_defaultStepIncrement) = value;
+        printf("WriteProperty: Lighting Output %u %s <- %.1f\n", objectInstance,
+               isRampRate ? "Default_Ramp_Rate" : "Default_Step_Increment", value);
         return true;
     }
     return false;
 }
 
-// ENUMERATED write - Binary Output 1 (Fuchsia) Present_Value (0/1).
-bool SetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectType,
-                           const uint32_t objectInstance, const uint32_t propertyIdentifier,
-                           const uint32_t value, const bool useArrayIndex,
-                           const uint32_t propertyArrayIndex, const uint8_t priority,
-                           uint32_t* errorCode) {
-    (void)useArrayIndex;
-    (void)propertyArrayIndex;
-    if (deviceInstance != g_deviceInstance) {
-        return false;
-    }
-    Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && objectType == OBJECT_TYPE_BINARY_OUTPUT &&
-        propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-        // A Binary Output's Present_Value is 0 (inactive) or 1 (active). Reject
-        // anything else with value-out-of-range - validating the written value is
-        // part of being a conformant DS-WP-B device.
-        if (value > 1) {
-            *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
-            return false;
-        }
-        CommandWrite(c, priority, (double)value);
-        printf("WriteProperty: Binary Output %u (Fuchsia) <- %s @ priority %u\n",
-               objectInstance, value ? "active" : "inactive", EffectivePriority(priority));
-        return true;
-    }
-    return false;
-}
-
-// UNSIGNED write - Multi-State Output 1 (Indigo) Present_Value (state 1..3).
+// UNSIGNED write - Lighting Output Default_Fade_Time and Egress_Time.
 bool SetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t objectType,
                                 const uint32_t objectInstance, const uint32_t propertyIdentifier,
                                 const uint32_t value, const bool useArrayIndex,
@@ -969,27 +1342,88 @@ bool SetPropertyUnsignedInteger(const uint32_t deviceInstance, const uint16_t ob
                                 uint32_t* errorCode) {
     (void)useArrayIndex;
     (void)propertyArrayIndex;
-    if (deviceInstance != g_deviceInstance) {
+    (void)priority;
+    if (deviceInstance != g_deviceInstance || objectType != OBJECT_TYPE_LIGHTING_OUTPUT ||
+        objectInstance != LIGHTING_OUTPUT_INSTANCE) {
         return false;
     }
-    Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && objectType == OBJECT_TYPE_MULTI_STATE_OUTPUT &&
-        propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-        // A Multi-State Output's Present_Value is a state number in 1..Number_Of_States.
-        // Reject anything outside that range with value-out-of-range.
-        if (value < 1 || value > MULTI_STATE_OUTPUT_NUMBER_OF_STATES) {
+    if (propertyIdentifier == PROPERTY_IDENTIFIER_DEFAULT_FADE_TIME) {
+        // cl. 12.54.16: "100 ms to 86400000 ms (1 day) inclusive. Values written
+        // outside of the allowable range shall cause a Result(-) ... VALUE_OUT_OF_RANGE."
+        if (value < LIGHTING_FADE_TIME_MIN || value > LIGHTING_FADE_TIME_MAX) {
             *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
             return false;
         }
-        CommandWrite(c, priority, (double)value);
-        printf("WriteProperty: Multi-State Output %u (Indigo) <- state %u @ priority %u\n",
-               objectInstance, value, EffectivePriority(priority));
+        g_defaultFadeTime = value;
+        printf("WriteProperty: Lighting Output %u Default_Fade_Time <- %u ms\n", objectInstance, value);
+        return true;
+    }
+    if (propertyIdentifier == PROPERTY_IDENTIFIER_EGRESS_TIME) {
+        // cl. 12.54.14 gives Egress_Time no range; it is seconds. A new value applies
+        // to the next warn, not to an egress timer already running.
+        g_egressTime = value;
+        printf("WriteProperty: Lighting Output %u Egress_Time <- %u s\n", objectInstance, value);
         return true;
     }
     return false;
 }
 
-// NULL write - relinquish a commandable output's Present_Value at a priority. The
+// ENUMERATED write - Lighting Output Reliability, writable only while
+// Out_Of_Service is TRUE (cl. 12.54.12 (c)).
+bool SetPropertyEnumerated(const uint32_t deviceInstance, const uint16_t objectType,
+                           const uint32_t objectInstance, const uint32_t propertyIdentifier,
+                           const uint32_t value, const bool useArrayIndex,
+                           const uint32_t propertyArrayIndex, const uint8_t priority,
+                           uint32_t* errorCode) {
+    (void)useArrayIndex;
+    (void)propertyArrayIndex;
+    (void)priority;
+    if (deviceInstance != g_deviceInstance || objectType != OBJECT_TYPE_LIGHTING_OUTPUT ||
+        objectInstance != LIGHTING_OUTPUT_INSTANCE || propertyIdentifier != PROPERTY_IDENTIFIER_RELIABILITY) {
+        return false;
+    }
+    if (!g_outOfService) {
+        // In service, Reliability is what the lamp-failure detection says; a client
+        // does not get to overwrite it.
+        *errorCode = ERROR_CODE_WRITE_ACCESS_DENIED;
+        return false;
+    }
+    if (value > RELIABILITY_HIGHEST_DEFINED && value < 64) {
+        // 0..63 are ASHRAE's; an unassigned one is not a reliability. 64 and up are
+        // vendor-proprietary and accepted as written.
+        *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
+        return false;
+    }
+    g_reliabilityWhileOutOfService = value;
+    printf("WriteProperty: Lighting Output %u Reliability <- %u (Out_Of_Service)\n", objectInstance, value);
+    return true;
+}
+
+// BOOLEAN write - Lighting Output Out_Of_Service.
+bool SetPropertyBool(const uint32_t deviceInstance, const uint16_t objectType,
+                     const uint32_t objectInstance, const uint32_t propertyIdentifier,
+                     const bool value, const bool useArrayIndex,
+                     const uint32_t propertyArrayIndex, const uint8_t priority,
+                     uint32_t* errorCode) {
+    (void)useArrayIndex;
+    (void)propertyArrayIndex;
+    (void)priority;
+    (void)errorCode;
+    if (deviceInstance != g_deviceInstance || objectType != OBJECT_TYPE_LIGHTING_OUTPUT ||
+        objectInstance != LIGHTING_OUTPUT_INSTANCE || propertyIdentifier != PROPERTY_IDENTIFIER_OUT_OF_SERVICE) {
+        return false;
+    }
+    if (value && !g_outOfService) {
+        // Taken out of service: Reliability stops following the lamp and starts from
+        // what it was, until a client writes it.
+        g_reliabilityWhileOutOfService = LightingReliability();
+    }
+    g_outOfService = value;
+    printf("WriteProperty: Lighting Output %u Out_Of_Service <- %s\n", objectInstance, value ? "TRUE" : "FALSE");
+    return true;
+}
+
+// NULL write - relinquish the Lighting Output's Present_Value at a priority. The
 // stack routes a WriteProperty of NULL here (one callback for every data type).
 bool SetPropertyNull(const uint32_t deviceInstance, const uint16_t objectType,
                      const uint32_t objectInstance, const uint32_t propertyIdentifier,
@@ -1001,15 +1435,15 @@ bool SetPropertyNull(const uint32_t deviceInstance, const uint16_t objectType,
     if (deviceInstance != g_deviceInstance) {
         return false;
     }
-    Commandable* c = GetCommandable(objectType, objectInstance);
-    if (c != NULL && propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
-        CommandRelinquish(c, priority);
-        printf("WriteProperty: relinquished %s %u @ priority %u\n",
-               objectType == OBJECT_TYPE_ANALOG_OUTPUT ? "Analog Output" :
-               objectType == OBJECT_TYPE_BINARY_OUTPUT ? "Binary Output" :
-               objectType == OBJECT_TYPE_LIGHTING_OUTPUT ? "Lighting Output" :
-               "Multi-State Output",
-               objectInstance, EffectivePriority(priority));
+    Commandable* commandable = GetCommandable(objectType, objectInstance);
+    if (commandable != NULL && propertyIdentifier == PROPERTY_IDENTIFIER_PRESENT_VALUE) {
+        const uint8_t writePriority = EffectivePriority(priority);
+        // A relinquish is a write to Present_Value too: at the priority of the
+        // command in progress (or above) it halts it.
+        HaltIfWriteOverrides(writePriority, "Present_Value relinquished");
+        CommandRelinquish(commandable, writePriority);
+        UpdateLastOnValue();
+        printf("WriteProperty: relinquished Lighting Output %u @ priority %u\n", objectInstance, writePriority);
         return true;
     }
     return false;
@@ -1018,7 +1452,7 @@ bool SetPropertyNull(const uint32_t deviceInstance, const uint16_t objectType,
 // -----------------------------------------------------------------------------
 // F-LIGHT - canonical implementation (B-LD is the reference for this feature:
 // Lighting Output 1 "Jade", OBJECT_TYPE_LIGHTING_OUTPUT = 54. A later series repo
-// that needs a commandable Lighting Output copies this section plus the
+// that needs a commandable Lighting Output copies sections 1b, 1d and 2c plus the
 // Present_Value/Priority_Array wiring in SetPropertyReal/GetPropertyReal above,
 // then renames the instance/label).
 // 2c. Lighting_Command callbacks - the heart of B-LD (DS-LO-B)
@@ -1030,17 +1464,23 @@ bool SetPropertyNull(const uint32_t deviceInstance, const uint16_t objectType,
 // byte-twiddling anywhere in this file.
 //
 //     operation      - fadeTo / rampTo / stepUp / stepDown / warn / stop / ...
-//     target-level   - REAL 0.0..100.0   (optional)
-//     ramp-rate      - REAL % per second (optional)
-//     step-increment - REAL %            (optional)
-//     fade-time      - Unsigned ms       (optional)
-//     priority       - Unsigned 1..16    (optional)
+//     target-level   - REAL 0.0..100.0          (optional)
+//     ramp-rate      - REAL 0.1..100.0 %/s       (optional)
+//     step-increment - REAL 0.1..100.0 %         (optional)
+//     fade-time      - Unsigned 100..86400000 ms (optional)
+//     priority       - Unsigned 1..16            (optional)
 //
 // Each optional field has a use* flag. On the GET side, setting it false omits
 // the field from the SEQUENCE. On the SET side, false means the WRITER OMITTED IT
 // - and the accompanying value is meaningless, so you must apply your own default
-// instead (cl. 12.54.9). That distinction is the whole reason the flags exist: a
-// fadeTo with no fade-time means "fade over Default_Fade_Time", NOT "fade in 0 ms".
+// instead (cl. 12.54.6 Table 12-66). That distinction is the whole reason the
+// flags exist: a fadeTo with no fade-time means "fade over Default_Fade_Time",
+// NOT "fade in 0 ms".
+//
+// The stack range-checks the fields the operation uses before it calls the SET
+// callback (out of range -> PROPERTY / VALUE_OUT_OF_RANGE, cl. 12.54.6), so the
+// checks below are this device's own: operation NONE, a missing target-level, and
+// the priority field.
 // -----------------------------------------------------------------------------
 
 // GET - report the last command this light was given.
@@ -1058,8 +1498,8 @@ bool GetPropertyLightingCommand(const uint32_t deviceInstance, const uint16_t ob
         objectInstance != LIGHTING_OUTPUT_INSTANCE ||
         propertyIdentifier != PROPERTY_IDENTIFIER_LIGHTING_COMMAND) {
         // Not a match - same "let another registered callback try" convention as
-        // every other Get/Set callback in this file (see SetPropertyReal above).
-        // errorCode is deliberately left untouched here.
+        // every other Get/Set callback in this file. errorCode is deliberately left
+        // untouched here.
         (void)errorCode;
         return false;
     }
@@ -1092,96 +1532,45 @@ bool SetPropertyLightingCommand(const uint32_t deviceInstance, const uint16_t ob
         return false;
     }
 
-    // Validate before accepting - a conformant device rejects a bad command rather
-    // than obeying it. A Lighting Output's level is a percentage.
-    if (useTargetLevel && (targetLevel < 0.0f || targetLevel > 100.0f)) {
-        *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
-        return false;
-    }
+    // Validate before accepting - a conformant device refuses a bad command rather
+    // than obeying it, and a refused command changes nothing.
     if (usePriority && (priority < 1 || priority > BACNET_PRIORITY_ARRAY_SIZE)) {
         *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
         return false;
     }
-    // fadeTo and rampTo REQUIRE a target level (clause 12.54.9). Reject the write
-    // if it is missing rather than recording a command that never moves the light -
-    // otherwise the write succeeds, nothing happens, and a later read reports back
-    // a fadeTo with no target that never took effect.
+    // fadeTo and rampTo REQUIRE a target level (Table 12-67 syntax:
+    // "<operation = FADE_TO> <target-level> [priority] [fade-time]"). Refuse the
+    // write if it is missing rather than recording a command that never moves the
+    // light.
     if ((operation == LIGHTING_OPERATION_FADE_TO || operation == LIGHTING_OPERATION_RAMP_TO) &&
         !useTargetLevel) {
         *errorCode = ERROR_CODE_VALUE_OUT_OF_RANGE;
         return false;
     }
 
-    // Remember the command so a read of Lighting_Command reports it back.
+    // Resolve the omitted optionals to this light's defaults - this is where the
+    // use* flags earn their keep. A fadeTo that omitted fade-time fades over
+    // Default_Fade_Time; it does NOT snap instantly because `fadeTime` arrived as 0.
+    const uint32_t effectiveFadeTime = useFadeTime ? fadeTime : g_defaultFadeTime;
+    const float effectiveRampRate = useRampRate ? rampRate : g_defaultRampRate;
+    const float effectiveStepIncrement = useStepIncrement ? stepIncrement : g_defaultStepIncrement;
+    // "If the priority field is not included with the command, the priority
+    // specified in Lighting_Command_Default_Priority shall be used" (cl. 12.54.6).
+    const uint8_t effectiveCommandPriority =
+        (uint8_t)(usePriority ? priority : LIGHTING_COMMAND_DEFAULT_PRIORITY);
+
+    if (!ExecuteLightingOperation(operation, effectiveCommandPriority, targetLevel, effectiveFadeTime,
+                                  effectiveRampRate, effectiveStepIncrement, errorCode)) {
+        return false;
+    }
+
+    // Accepted: remember the command so a read of Lighting_Command reports it back.
     g_lightingCommand.operation = operation;
     g_lightingCommand.useTargetLevel = useTargetLevel;     g_lightingCommand.targetLevel = targetLevel;
     g_lightingCommand.useRampRate = useRampRate;           g_lightingCommand.rampRate = rampRate;
     g_lightingCommand.useStepIncrement = useStepIncrement; g_lightingCommand.stepIncrement = stepIncrement;
     g_lightingCommand.useFadeTime = useFadeTime;           g_lightingCommand.fadeTime = fadeTime;
     g_lightingCommand.usePriority = usePriority;           g_lightingCommand.priority = priority;
-
-    // Resolve the omitted optionals to this light's defaults - this is where the
-    // use* flags earn their keep. A fadeTo that omitted fade-time fades over
-    // Default_Fade_Time; it does NOT snap instantly because `fadeTime` happened to
-    // arrive as 0.
-    const uint32_t effectiveFadeTime = useFadeTime ? fadeTime : LIGHTING_DEFAULT_FADE_TIME;
-    const float effectiveRampRate = useRampRate ? rampRate : LIGHTING_DEFAULT_RAMP_RATE;
-    const float effectiveStepIncrement = useStepIncrement ? stepIncrement : LIGHTING_DEFAULT_STEP_INCREMENT;
-    // A Lighting_Command that names no priority writes at Lighting_Command_Default_Priority.
-    const uint8_t effectiveCommandPriority =
-        (uint8_t)(usePriority ? priority : LIGHTING_COMMAND_DEFAULT_PRIORITY);
-
-    // Apply the command to the light's level. ON REAL HARDWARE this is where you
-    // would start the fade/ramp on your dimming driver and set In_Progress to
-    // fadeActive/rampActive until it arrives. This example completes instantly and
-    // reports In_Progress = idle, which is the honest answer for a device with no
-    // dimming hardware behind it.
-    const float currentLevel = ResolveLightingLevel(&g_lightingOutput);
-    switch (operation) {
-        case LIGHTING_OPERATION_FADE_TO:
-            if (useTargetLevel) {
-                CommandWrite(&g_lightingOutput, effectiveCommandPriority, (double)targetLevel);
-                printf("Lighting_Command: fadeTo %.1f%% over %u ms @ priority %u\n",
-                       targetLevel, effectiveFadeTime, effectiveCommandPriority);
-            }
-            break;
-        case LIGHTING_OPERATION_RAMP_TO:
-            if (useTargetLevel) {
-                CommandWrite(&g_lightingOutput, effectiveCommandPriority, (double)targetLevel);
-                printf("Lighting_Command: rampTo %.1f%% at %.1f%%/s @ priority %u\n",
-                       targetLevel, effectiveRampRate, effectiveCommandPriority);
-            }
-            break;
-        case LIGHTING_OPERATION_STEP_UP: {
-            float next = currentLevel + effectiveStepIncrement;
-            if (next > 100.0f) { next = 100.0f; }
-            CommandWrite(&g_lightingOutput, effectiveCommandPriority, (double)next);
-            printf("Lighting_Command: stepUp %.1f%% -> %.1f%% @ priority %u\n",
-                   effectiveStepIncrement, next, effectiveCommandPriority);
-            break;
-        }
-        case LIGHTING_OPERATION_STEP_DOWN: {
-            float next = currentLevel - effectiveStepIncrement;
-            if (next < 0.0f) { next = 0.0f; }
-            CommandWrite(&g_lightingOutput, effectiveCommandPriority, (double)next);
-            printf("Lighting_Command: stepDown %.1f%% -> %.1f%% @ priority %u\n",
-                   effectiveStepIncrement, next, effectiveCommandPriority);
-            break;
-        }
-        case LIGHTING_OPERATION_STOP:
-            // Stop a fade/ramp in flight and hold the current level.
-            g_lightingInProgress = LIGHTING_IN_PROGRESS_IDLE;
-            printf("Lighting_Command: stop (holding at %.1f%%)\n", currentLevel);
-            break;
-        default:
-            // Every other BACnetLightingOperation (warn / warnOff / warnRelinquish /
-            // stepOn / stepOff / restoreOn / ...) is accepted and recorded, but this
-            // example has no dimming hardware to act it out. We log it honestly
-            // rather than pretend it did something.
-            printf("Lighting_Command: %s accepted (recorded; no hardware to act on it)\n",
-                   LightingOperationName(operation));
-            break;
-    }
 
     (void)priorityForWriting; // the command's own priority field is what drives the light
     return true;
@@ -1482,14 +1871,16 @@ int main(int argc, char** argv) {
     // F-TIMESYNC: Local_Date / Local_Time, served from g_syncedDateTime.
     BACnetStack_RegisterCallbackGetPropertyDate(GetPropertyDate);
     BACnetStack_RegisterCallbackGetPropertyTime(GetPropertyTime);
-    // The "set" callbacks accept WriteProperty (DS-WP-B) to the commandable
-    // outputs. One callback per written data type, plus the NULL callback that
-    // relinquishes a priority slot.
+    // The "set" callbacks accept WriteProperty (DS-WP-B): the commandable
+    // Present_Value, the writable timings, Out_Of_Service and Reliability. One
+    // callback per written data type, plus the NULL callback that relinquishes a
+    // priority slot.
     BACnetStack_RegisterCallbackSetPropertyReal(SetPropertyReal);
-    BACnetStack_RegisterCallbackSetPropertyEnumerated(SetPropertyEnumerated);
     BACnetStack_RegisterCallbackSetPropertyUnsignedInteger(SetPropertyUnsignedInteger);
+    BACnetStack_RegisterCallbackSetPropertyEnumerated(SetPropertyEnumerated);
+    BACnetStack_RegisterCallbackSetPropertyBool(SetPropertyBool);
     BACnetStack_RegisterCallbackSetPropertyNull(SetPropertyNull);
-    // The DeviceCommunicationControl callback makes this a B-ASC (DM-DCC-B).
+    // DeviceCommunicationControl (DM-DCC-B).
     BACnetStack_RegisterCallbackDeviceCommunicationControl(DeviceCommunicationControl);
     // The Lighting_Command callbacks make this a B-LD (DS-LO-B). These are typed
     // callbacks: the stack assembles / decodes the BACnetLightingCommand SEQUENCE
@@ -1505,13 +1896,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Enable the three services a B-ASC must execute: ReadProperty (DS-RP-B),
-    // WriteProperty (DS-WP-B), and DeviceCommunicationControl (DM-DCC-B). We set
-    // them explicitly to make the profile requirements obvious.
+    // Enable the services a B-LD must execute: ReadProperty (DS-RP-B),
+    // WriteProperty (DS-WP-B, and the writes DS-LO-B is made of),
+    // DeviceCommunicationControl (DM-DCC-B) and TimeSynchronization (DM-TS-B). We
+    // set them explicitly to make the profile requirements obvious.
     //
     // We deliberately do NOT enable ReadPropertyMultiple, SubscribeCOV, or any
-    // alarm/event service: an Application Specific Controller does not require
-    // them, so a faithful B-ASC example leaves them off.
+    // alarm/event service: a B-LD does not require them.
     if (!BACnetStack_SetServiceEnabled(g_deviceInstance, SERVICE_READ_PROPERTY, true)) {
         printf("Error: Failed to enable the ReadProperty service.\n");
         return 1;
@@ -1524,8 +1915,7 @@ int main(int argc, char** argv) {
         printf("Error: Failed to enable the DeviceCommunicationControl service.\n");
         return 1;
     }
-    // TimeSynchronization (DM-TS-B) - the last service a B-LD must execute. The
-    // profile allows DM-TS-B *or* DM-UTC-B; we do local time, so only this one.
+    // The profile allows DM-TS-B *or* DM-UTC-B; we do local time, so only this one.
     if (!BACnetStack_SetServiceEnabled(g_deviceInstance, SERVICE_TIME_SYNCHRONIZATION, true)) {
         printf("Error: Failed to enable the TimeSynchronization service.\n");
         return 1;
@@ -1548,40 +1938,12 @@ int main(int argc, char** argv) {
         printf("Error: Failed to enable the discovery services (Who-Is/I-Am, Who-Has/I-Have).\n");
         return 1;
     }
-    // --- Add the read-only sensor objects -----------------------------------
-    // Every stack setup call returns a bool; a real device should always check
-    // it, so this example does too.
-    if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_ANALOG_INPUT, ANALOG_INPUT_INSTANCE)) {
-        printf("Error: Failed to add Analog Input %u (Bronze).\n", ANALOG_INPUT_INSTANCE);
-        return 1;
-    }
-    if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_BINARY_INPUT, BINARY_INPUT_INSTANCE)) {
-        printf("Error: Failed to add Binary Input %u (Emerald).\n", BINARY_INPUT_INSTANCE);
-        return 1;
-    }
-    if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_MULTI_STATE_INPUT, MULTI_STATE_INPUT_INSTANCE)) {
-        printf("Error: Failed to add Multi-State Input %u (Hot Pink).\n", MULTI_STATE_INPUT_INSTANCE);
-        return 1;
-    }
 
-    // --- Add the commandable OUTPUT objects (the B-SA additions) -------------
-    // These accept WriteProperty. We make each one commandable below.
-    if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_ANALOG_OUTPUT, ANALOG_OUTPUT_INSTANCE)) {
-        printf("Error: Failed to add Analog Output %u (Chartreuse).\n", ANALOG_OUTPUT_INSTANCE);
-        return 1;
-    }
-    if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_BINARY_OUTPUT, BINARY_OUTPUT_INSTANCE)) {
-        printf("Error: Failed to add Binary Output %u (Fuchsia).\n", BINARY_OUTPUT_INSTANCE);
-        return 1;
-    }
-    if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_MULTI_STATE_OUTPUT, MULTI_STATE_OUTPUT_INSTANCE)) {
-        printf("Error: Failed to add Multi-State Output %u (Indigo).\n", MULTI_STATE_OUTPUT_INSTANCE);
-        return 1;
-    }
-
-    // --- Add the Lighting Output (the B-LD addition) ------------------------
+    // --- Add the Lighting Output ---------------------------------------------
     // This one object is why the profile exists. It is added with the plain
-    // AddObject - the stack has no special Add*Object helper for it.
+    // AddObject - the stack has no special Add*Object helper for it on the
+    // customer interface. Every stack setup call returns a bool; a real device
+    // should always check it, so this example does too.
     if (!BACnetStack_AddObject(g_deviceInstance, OBJECT_TYPE_LIGHTING_OUTPUT, LIGHTING_OUTPUT_INSTANCE)) {
         printf("Error: Failed to add Lighting Output %u (Jade).\n", LIGHTING_OUTPUT_INSTANCE);
         return 1;
@@ -1607,95 +1969,90 @@ int main(int argc, char** argv) {
 
     // --- Enable the OPTIONAL properties we choose to expose ------------------
     // The stack automatically enables an object's REQUIRED properties when the
-    // object is added (AddObject / AddNetworkPortObject) - so Units, Polarity,
-    // Number_Of_States, Out_Of_Service, and the Network Port's BACnet/IP
-    // addressing (IP_Address, IP_Subnet_Mask, BACnet_IP_UDP_Port, ...) are
-    // already enabled; our Get* callbacks just supply their values. Only
-    // OPTIONAL properties need SetPropertyEnabled. State_Text is optional on a
-    // Multi-State Input, so we enable it here (and serve it in GetPropertyCharString).
+    // object is added (AddObject / AddNetworkPortObject); our Get* callbacks just
+    // supply their values. Only OPTIONAL properties need SetPropertyEnabled.
     //
-    // The Device's Description is optional too, and it is an easy one to get
-    // wrong: serving it from a Get callback is NOT enough. The stack checks
+    // The Device's Description is optional, and it is an easy one to get wrong:
+    // serving it from a Get callback is NOT enough. The stack checks
     // IsPropertyEnabled BEFORE it ever reaches the callbacks, and for an optional
     // property that check falls back to "is it required?" - which is false. So a
     // Description branch in the callback without this enable is DEAD CODE, and
-    // the client reads back Error: unknown-property. (This example shipped
-    // exactly that bug; it was caught by a reviewer tracing the stack source, not
-    // by running it - a plausible-looking callback branch that never executes.)
+    // the client reads back Error: unknown-property.
     if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_DEVICE,
                                         g_deviceInstance, PROPERTY_IDENTIFIER_DESCRIPTION, true)) {
         printf("Error: Failed to enable Description on the Device object.\n");
         return 1;
     }
-
-    if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_MULTI_STATE_INPUT,
-                                        MULTI_STATE_INPUT_INSTANCE, PROPERTY_IDENTIFIER_STATE_TEXT, true)) {
-        printf("Error: Failed to enable State_Text on Multi-State Input 1 (Hot Pink).\n");
+    // Reliability is optional on a Lighting Output (Table 12-64 "O"). Enabled so the
+    // light can say its lamp has failed: the stack then sets Status_Flags' FAULT flag
+    // whenever Reliability is not NO_FAULT_DETECTED (cl. 12.54.9).
+    if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_LIGHTING_OUTPUT,
+                                        LIGHTING_OUTPUT_INSTANCE, PROPERTY_IDENTIFIER_RELIABILITY, true)) {
+        printf("Error: Failed to enable Reliability on Lighting Output 1 (Jade).\n");
         return 1;
     }
 
-    // --- Make the output objects commandable --------------------------------
+    // --- Make the Lighting Output commandable --------------------------------
     // A commandable object's Present_Value is resolved from a 16-slot
     // Priority_Array plus a Relinquish_Default: a WriteProperty sets a slot,
     // writing NULL relinquishes it, and the highest-priority non-null slot (or
-    // Relinquish_Default) wins.
+    // Relinquish_Default) wins. Priority_Array and Relinquish_Default are REQUIRED
+    // on a Lighting Output, so AddObject already enabled them; these calls state
+    // the commandable contract in one visible place, and they become load-bearing
+    // the moment you copy the pattern to an optionally-commandable type (Analog
+    // Value, Binary Value, Multi-State Value), where both default to OPTIONAL.
+    if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_LIGHTING_OUTPUT, LIGHTING_OUTPUT_INSTANCE,
+                                        PROPERTY_IDENTIFIER_PRIORITY_ARRAY, true) ||
+        !BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_LIGHTING_OUTPUT, LIGHTING_OUTPUT_INSTANCE,
+                                        PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT, true) ||
+        !BACnetStack_SetPropertyWritable(g_deviceInstance, OBJECT_TYPE_LIGHTING_OUTPUT, LIGHTING_OUTPUT_INSTANCE,
+                                         PROPERTY_IDENTIFIER_PRESENT_VALUE, true)) {
+        printf("Error: Failed to make Lighting Output 1 (Jade) commandable.\n");
+        return 1;
+    }
+
+    // --- Make the other written properties writable ---------------------------
+    // Lighting_Command is REQUIRED *and WRITABLE* on a Lighting Output (Table 12-64
+    // "W") - writing it is what commands the light, so DS-LO-B is not satisfied
+    // without it. Marking it writable is what routes a write to our
+    // SetPropertyLightingCommand callback.
     //
-    // WORTH KNOWING BEFORE YOU COPY THIS: for ANALOG/BINARY/MULTI-STATE OUTPUT
-    // the three calls below are effectively NO-OPS. They reproduce the
-    // stack's own defaults. Verified in the stack source:
-    //   - Present_Value on an Analog Output already defaults to required AND
-    //     writable (BACnetDBPropertyProfile.cpp: presentValue -> SetProperty(
-    //     true, true, Real)), and Priority_Array / Relinquish_Default default to
-    //     required - so AddObject already enabled all three; and
-    //   - IsPropertyCommandable() (BACnetBusinessLogic.cpp) returns true for
-    //     analogOutput / binaryOutput / multiStateOutput Present_Value
-    //     UNCONDITIONALLY - it consults no enable at all.
-    // Delete this loop and these objects still accept WriteProperty. Nothing
-    // here "flips the object into commandable mode"; the stack already did.
-    //
-    // So why keep it? Because it states the commandable contract in one visible
-    // place, and because it becomes LOAD-BEARING the moment you copy this pattern
-    // to an optionally-commandable type - Analog Value, Binary Value, Multi-State
-    // Value. There Priority_Array / Relinquish_Default default to OPTIONAL (not
-    // enabled), and IsPropertyCommandable() explicitly requires BOTH to be
-    // enabled before it will treat the object as commandable. Omit these calls on
-    // an Analog Value and it silently is not commandable.
-    //
-    // Carry the INSTANCE alongside the type rather than assuming instance 1. On
-    // these output types the distinction is benign (see above) - but it is fatal
-    // on a Value type, where the enable must land on the exact object you mean.
-    // Say what you mean, so the pattern stays correct when it is copied.
-    struct CommandableObject { uint16_t type; uint32_t instance; };
-    const CommandableObject outputs[] = {
-        { OBJECT_TYPE_ANALOG_OUTPUT,      ANALOG_OUTPUT_INSTANCE },
-        { OBJECT_TYPE_BINARY_OUTPUT,      BINARY_OUTPUT_INSTANCE },
-        { OBJECT_TYPE_MULTI_STATE_OUTPUT, MULTI_STATE_OUTPUT_INSTANCE },
-        { OBJECT_TYPE_LIGHTING_OUTPUT,    LIGHTING_OUTPUT_INSTANCE },
+    // The rest are this device's choice (Table 12-64 lists them "R", which allows
+    // writable): the dimming defaults and Egress_Time, so a lighting system can tune
+    // them, and Out_Of_Service / Reliability, which cl. 12.54.12 makes writable "to
+    // allow simulating specific conditions or for testing purposes". Each Set
+    // callback range-checks what it accepts.
+    const uint32_t writableProperties[] = {
+        PROPERTY_IDENTIFIER_LIGHTING_COMMAND,
+        PROPERTY_IDENTIFIER_DEFAULT_FADE_TIME,
+        PROPERTY_IDENTIFIER_DEFAULT_RAMP_RATE,
+        PROPERTY_IDENTIFIER_DEFAULT_STEP_INCREMENT,
+        PROPERTY_IDENTIFIER_EGRESS_TIME,
+        PROPERTY_IDENTIFIER_OUT_OF_SERVICE,
+        PROPERTY_IDENTIFIER_RELIABILITY,
     };
-    for (size_t i = 0; i < sizeof(outputs) / sizeof(outputs[0]); ++i) {
-        if (!BACnetStack_SetPropertyEnabled(g_deviceInstance, outputs[i].type, outputs[i].instance,
-                                            PROPERTY_IDENTIFIER_PRIORITY_ARRAY, true) ||
-            !BACnetStack_SetPropertyEnabled(g_deviceInstance, outputs[i].type, outputs[i].instance,
-                                            PROPERTY_IDENTIFIER_RELINQUISH_DEFAULT, true) ||
-            !BACnetStack_SetPropertyWritable(g_deviceInstance, outputs[i].type, outputs[i].instance,
-                                             PROPERTY_IDENTIFIER_PRESENT_VALUE, true)) {
-            printf("Error: Failed to make object type %u instance %u commandable.\n",
-                   outputs[i].type, outputs[i].instance);
+    for (size_t propertyIndex = 0; propertyIndex < sizeof(writableProperties) / sizeof(writableProperties[0]);
+         ++propertyIndex) {
+        if (!BACnetStack_SetPropertyWritable(g_deviceInstance, OBJECT_TYPE_LIGHTING_OUTPUT,
+                                             LIGHTING_OUTPUT_INSTANCE, writableProperties[propertyIndex], true)) {
+            printf("Error: Failed to make property %u of Lighting Output 1 (Jade) writable.\n",
+                   writableProperties[propertyIndex]);
             return 1;
         }
     }
 
-    // --- Make Lighting_Command writable (the B-LD addition) ------------------
-    // Lighting_Command is REQUIRED *and WRITABLE* on a Lighting Output (cl. 12.54.9)
-    // - writing it is what commands the light, so DS-LO-B is not satisfied without
-    // this. The stack already enabled the property on AddObject (it is required);
-    // marking it writable is what lets a client write it and routes the write to
-    // our SetPropertyLightingCommand callback.
-    if (!BACnetStack_SetPropertyWritable(g_deviceInstance, OBJECT_TYPE_LIGHTING_OUTPUT,
-                                         LIGHTING_OUTPUT_INSTANCE,
-                                         PROPERTY_IDENTIFIER_LIGHTING_COMMAND, true)) {
-        printf("Error: Failed to make Lighting Output 1 (Jade) Lighting_Command writable.\n");
-        return 1;
+    // --- Simulation: the test-only lamp hook (section 1c) --------------------
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996) // getenv: read once here, the pointer is not kept
+#endif
+    const char* lampBurnsOut = getenv("BLD_TEST_LAMP_BURNS_OUT");
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+    g_testLampBurnsOut = (lampBurnsOut != NULL && strcmp(lampBurnsOut, "1") == 0);
+    if (g_testLampBurnsOut) {
+        printf("TEST HOOK: BLD_TEST_LAMP_BURNS_OUT=1 - the simulated lamp will burn out when first switched on.\n");
     }
 
     // Who-Is is answered automatically. The spec also requires a device to
@@ -1706,15 +2063,19 @@ int main(int argc, char** argv) {
     printf("FYI: Device %u (\"%s\") ready. Vendor ID %u. Press 'h' for help.\n",
            g_deviceInstance, DEVICE_NAME, VENDOR_IDENTIFIER);
     printf("FYI: Lighting Output 1 (Jade) starts at %.1f%% (off). WriteProperty its\n"
-           "     Lighting_Command to fade/ramp/step it, or its Present_Value to set a level.\n",
-           ResolveLightingLevel(&g_lightingOutput));
+           "     Lighting_Command to fade/ramp/step/warn it, or its Present_Value to set a level.\n",
+           ResolvePresentValue(&g_lightingOutput));
 
     // --- Run the stack ------------------------------------------------------
-    // BACnetStack_Tick() processes incoming messages and timers. Call it
-    // continuously, and poll the keyboard for interactive commands.
+    // BACnetStack_Tick() processes incoming messages and timers. LightingTick()
+    // moves fades and ramps and runs egress timers (section 1b); the Simulation's
+    // lamp follows (section 1c). Call all three continuously, and poll the keyboard
+    // for interactive commands.
     bool running = true;
     while (running) {
         BACnetStack_Tick();
+        LightingTick();
+        SimulationLampTick();
 
         switch (CASExampleHelper::PollKey()) {
             case CASExampleHelper::KeyCommand::Help:
@@ -1722,14 +2083,6 @@ int main(int argc, char** argv) {
                 break;
             case CASExampleHelper::KeyCommand::Quit:
                 running = false;
-                break;
-            case CASExampleHelper::KeyCommand::ArrowUp:
-                g_analogInput1Value += 1.1f;
-                printf("Analog Input 1 (Bronze) = %.1f C\n", g_analogInput1Value);
-                break;
-            case CASExampleHelper::KeyCommand::ArrowDown:
-                g_analogInput1Value -= 1.1f;
-                printf("Analog Input 1 (Bronze) = %.1f C\n", g_analogInput1Value);
                 break;
             case CASExampleHelper::KeyCommand::None:
             default:

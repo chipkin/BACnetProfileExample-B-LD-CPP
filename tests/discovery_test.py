@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-LD discovery: read every property the lighting device says it has, the way a client does.
 
-    python3 tests/discovery_test.py [--exe build/BACnetExampleBLD] [--port 47821]
+    python3 tests/discovery_test.py [--exe build/BACnetExampleBLD] [--port 48020]
 
 What a BACnet client such as Chipkin BACnet Explorer does when it discovers a device,
 done over the wire from outside the example:
@@ -36,18 +36,13 @@ import wiretest  # noqa: E402  (the vendored harness at the repository root)
 from wiretest import record, summary  # noqa: E402
 
 # Match main.cpp.
-OBJECT_TYPE_MULTI_STATE_OUTPUT = 14    # cl. 21 BACnetObjectType
 OBJECT_TYPE_LIGHTING_OUTPUT = 54       # cl. 21 BACnetObjectType
 DEVICE_INSTANCE = 389016
 DEVICE = (wiretest.OBJECT_TYPE_DEVICE, DEVICE_INSTANCE)
 NETWORK_PORT = (wiretest.OBJECT_TYPE_NETWORK_PORT, 1)            # Network Port 1 "Vermilion"
+# Exactly the profile's set (Annex L.11.2): the Device, the Lighting Output DS-LO-B is
+# about, and the Network Port every device has.
 EXPECTED_OBJECTS = [DEVICE,
-                    (wiretest.OBJECT_TYPE_ANALOG_INPUT, 1),      # "Bronze"
-                    (wiretest.OBJECT_TYPE_BINARY_INPUT, 1),      # "Emerald"
-                    (wiretest.OBJECT_TYPE_MULTI_STATE_INPUT, 1), # "Hot Pink"
-                    (wiretest.OBJECT_TYPE_ANALOG_OUTPUT, 1),     # "Chartreuse"
-                    (wiretest.OBJECT_TYPE_BINARY_OUTPUT, 1),     # "Fuchsia"
-                    (OBJECT_TYPE_MULTI_STATE_OUTPUT, 1),         # "Indigo"
                     (OBJECT_TYPE_LIGHTING_OUTPUT, 1),            # "Jade"
                     NETWORK_PORT]
 
@@ -65,12 +60,7 @@ EXPLORER_FAILURES = [(PROPERTY_IP_DNS_SERVER, "IP_DNS_Server", "#20"),
                      (PROPERTY_FD_BBMD_ADDRESS, "FD_BBMD_Address", "#21"),
                      (PROPERTY_FD_SUBSCRIPTION_LIFETIME, "FD_Subscription_Lifetime", "#22")]
 
-OBJECT_TYPE_NAMES = {wiretest.OBJECT_TYPE_ANALOG_INPUT: "Analog Input",
-                     wiretest.OBJECT_TYPE_ANALOG_OUTPUT: "Analog Output",
-                     wiretest.OBJECT_TYPE_BINARY_INPUT: "Binary Input",
-                     wiretest.OBJECT_TYPE_BINARY_OUTPUT: "Binary Output", wiretest.OBJECT_TYPE_DEVICE: "Device",
-                     wiretest.OBJECT_TYPE_MULTI_STATE_INPUT: "Multi-state Input",
-                     OBJECT_TYPE_MULTI_STATE_OUTPUT: "Multi-state Output",
+OBJECT_TYPE_NAMES = {wiretest.OBJECT_TYPE_DEVICE: "Device",
                      OBJECT_TYPE_LIGHTING_OUTPUT: "Lighting Output",
                      wiretest.OBJECT_TYPE_NETWORK_PORT: "Network Port"}
 PDU_NAMES = {wiretest.PDU_ERROR: "Error", wiretest.PDU_REJECT: "Reject", wiretest.PDU_ABORT: "Abort"}
@@ -80,8 +70,8 @@ def parser():
     arguments = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     arguments.add_argument("--exe", default=str(wiretest.default_exe(REPOSITORY, "BACnetExampleBLD")),
                            help="path to BACnetExampleBLD (default: build/BACnetExampleBLD)")
-    arguments.add_argument("--port", type=int, default=47821,
-                           help="the lighting device's UDP port (default 47821)")
+    arguments.add_argument("--port", type=int, default=48020,
+                           help="the lighting device's UDP port (default 48020)")
     return arguments
 
 
@@ -137,8 +127,7 @@ def main():
         object_list_answer = client.read_property(args.port, *DEVICE, wiretest.PROPERTY_OBJECT_LIST, timeout=2.0)
         object_list = wiretest.decoded_values(object_list_answer.value_octets) if is_value(object_list_answer) else []
         # Control: the walk below proves nothing if it walks nothing.
-        record("Device Object_List names the Device, Analog Input 1, Binary Input 1, Multi-state Input 1, "
-               "Analog Output 1, Binary Output 1, Multi-state Output 1, Lighting Output 1 and Network Port 1",
+        record("Device Object_List names exactly the Device, Lighting Output 1 and Network Port 1",
                sorted(object_list) == sorted(EXPECTED_OBJECTS),
                f"{len(object_list)} objects" if is_value(object_list_answer) else outcome(object_list_answer))
 

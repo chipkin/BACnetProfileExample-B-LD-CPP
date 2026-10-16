@@ -4,17 +4,13 @@ A minimal, copy-paste-friendly example showing how to implement the BACnet
 **B-LD (Lighting Device)** device profile in C++ using the
 [CAS BACnet Stack](https://store.chipkin.com/services/stacks/bacnet-stack).
 It listens on **BACnet/IP (UDP 47808)**, answers **ReadProperty** and
-**WriteProperty** requests, is discoverable via **Who-Is / I-Am**, and drives a
-commandable **Lighting Output** through both a `Priority_Array` and the
-constructed `Lighting_Command` property.
-
-> **No dimming engine.** There is no light behind this example, and it does not
-> simulate one moving. Every command completes **at once**: a `fadeTo` or
-> `rampTo` puts `Present_Value` straight at the target, `Tracking_Value` always
-> equals `Present_Value`, and `In_Progress` always reads `idle`. The example
-> accepts, resolves and logs the fade time, ramp rate and step increment, but it
-> does not act them out over time. A real device starts its dimmer here and
-> reports the level it actually has.
+**WriteProperty** requests, is discoverable via **Who-Is / I-Am**, and runs one
+**Lighting Output** the way a luminaire does: a lighting system writes
+`Lighting_Command` and the light **fades, ramps, steps and blink-warns** over
+time - `Present_Value` is the target at once, `Tracking_Value` walks to it,
+`In_Progress` says what is running - or writes `Present_Value` through the
+16-slot `Priority_Array`. The lamp and dimming driver behind it are a
+[Simulation](#the-lamp-simulation); everything BACnet does with them is real.
 
 **[Download a prebuilt binary](https://github.com/chipkin/BACnetProfileExample-B-LD-CPP/releases)**
 (Windows and Linux x64) - or build it yourself, see [Build](#build) below.
@@ -24,7 +20,7 @@ constructed `Lighting_Command` property.
 - **[docs/PICS.md](docs/PICS.md)** - the Protocol Implementation Conformance
   Statement: every object, every property, and who answers it.
 
-> **Versions:** this document describes **example v1.1.3**, built and verified
+> **Versions:** this document describes **example v1.2.0**, built and verified
 > against **CAS BACnet Stack 6.0.23** (`6.x` @ `64b2cfac5`), at
 > **Protocol_Revision 30**, with the vendored `common/` helper at **v3.4.0**.
 > Running the example prints all three - if what it prints disagrees with this
@@ -41,7 +37,7 @@ constructed `Lighting_Command` property.
 |---|---|---|
 | **DS-RP-B** | Execute ReadProperty | `SERVICE_READ_PROPERTY`; `GetProperty*` callbacks |
 | **DS-WP-B** | Execute WriteProperty | `SERVICE_WRITE_PROPERTY`; `SetProperty*` callbacks |
-| **DS-LO-B** | Present a Lighting Output | `Lighting Output 1` ("Jade") - commandable + `Lighting_Command` |
+| **DS-LO-B** | Implement the Lighting Output object type | `Lighting Output 1` ("Jade") - commandable `Present_Value`, every `Lighting_Command` operation of Table 12-67, run over time |
 | **DM-DDB-B** | Answer Who-Is with I-Am | Handled by the stack; plus an unsolicited I-Am on start-up |
 | **DM-DOB-B** | Answer Who-Has with I-Have | Handled by the stack |
 | **DM-DCC-B** | Execute DeviceCommunicationControl | Password-gated accept/reject; the stack runs the state machine |
@@ -63,23 +59,100 @@ other lights - writing to them - is a **B-LS**, a different profile.
 ```
 Device 389016  "Chipkin Example B-LD"   (Vendor 389 - Chipkin Automation Systems)
     │
-    ├── Analog Input 1        "Bronze"      Present_Value  21.5    (REAL, degrees Celsius; read-only)
-    ├── Binary Input 1        "Emerald"     Present_Value  active  (active / inactive; read-only)
-    ├── Multi-State Input 1   "Hot Pink"    Present_Value  1       (state 1..3; read-only)
-    ├── Analog Output 1       "Chartreuse"  Present_Value  20.0    (REAL setpoint; WRITABLE, commandable)
-    ├── Binary Output 1       "Fuchsia"     Present_Value  inactive (WRITABLE, commandable)
-    ├── Multi-State Output 1  "Indigo"      Present_Value  1       (state 1..3; WRITABLE, commandable)
-    ├── Lighting Output 1     "Jade"        Present_Value  0.0     (REAL 0-100%; WRITABLE, commandable + Lighting_Command)
+    ├── Lighting Output 1     "Jade"        Present_Value  0.0     (REAL 0-100%; commandable + Lighting_Command)
     └── Network Port 1        "Vermilion"   the BACnet/IP port     (required on every device)
 ```
+
+That is exactly the profile's set: ANSI/ASHRAE 135-2024 Annex L.11.2 says "A B-LD
+is any device that implements Binary Lighting Output and/or Lighting Output
+objects", and every device has a Device and a Network Port. (Up to v1.1.3 the
+example also carried the B-ASC example's sensor and output objects; they are not
+part of a B-LD and were removed in v1.2.0.)
+
+## The scenario: a light that fades
+
+What a B-LD is for, in one sentence: **it is a light that does what a lighting
+system tells it to, the way clause 12.54 says a Lighting Output does it.** This
+example does that against a Peer - any BACnet client: a lighting supervisor
+(B-LS), a Schedule in a building controller, a wall-station gateway, or the
+Python client in [`tests/`](tests/README.md):
+
+1. The Peer writes `Lighting_Command` = `{fadeTo, target-level 80, fade-time 2000}`.
+   `Present_Value` reads **80 at once** - it is the target (cl. 12.54.4) - and
+   `Priority_Array[16]` holds it (`Lighting_Command_Default_Priority`).
+2. For the next 2 seconds `Tracking_Value` - the level the lamp is actually being
+   driven at (cl. 12.54.5) - climbs from 0 to 80 in proportion to the time, and
+   `In_Progress` reads `fadeActive`. Then it reads `idle` and `Tracking_Value`
+   equals `Present_Value`.
+3. `rampTo` does the same at a fixed rate in percent per second; `stepUp` /
+   `stepDown` / `stepOn` / `stepOff` move the level by `step-increment` at once;
+   a command that omits fade-time, ramp-rate or step-increment uses
+   `Default_Fade_Time` / `Default_Ramp_Rate` / `Default_Step_Increment`.
+4. `stop` halts a fade part-way and **holds the level**: `Tracking_Value` is
+   written to the command's slot and `In_Progress` goes `idle`.
+5. **Priorities arbitrate.** An operator writing `Present_Value` at priority 8
+   mid-fade halts the priority-16 fade (cl. 12.54.6.1); the halted fade's target
+   stays in `Priority_Array[16]`, and when priority 8 is relinquished the light
+   goes there at once. A fade written at a priority that is not in control is
+   stored but not executed. A lower-priority write never disturbs a fade.
+6. **End of the day** (cl. 12.54's own example, Figure 12-14): `warnRelinquish`
+   blinks the lamp, holds the level for `Egress_Time` with `Egress_Active` TRUE,
+   then relinquishes; `warnOff` writes 0.0% instead; `stop` cancels the egress
+   timer. `Present_Value` special values -1.0 to -7.0 (Table 12-65) do the same
+   for a client that cannot write a `BACnetLightingCommand` - a Schedule, say.
+   `restoreOn`, `defaultOn` and the two toggles use `Last_On_Value` and
+   `Default_On_Value`.
+7. **Failure Mode - a bad command.** A command whose fade-time, ramp-rate,
+   step-increment or target-level is out of range, operation `none`, a
+   `Present_Value` outside 0-100 %, or a `Default_*` out of range is refused with
+   **Error PROPERTY / VALUE_OUT_OF_RANGE** (cl. 12.54.6, 12.54.4, 12.54.16-18),
+   and the light does not move.
+8. **Failure Mode - a burnt-out lamp.** The light reports `Reliability` =
+   `lampFailure`, and the stack sets the **FAULT** flag of `Status_Flags`
+   (cl. 12.54.9, 12.54.11). BACnet keeps working: commands still drive
+   `Present_Value` and `Tracking_Value`.
+
+Every step is printed on the console as it happens.
+
+### What is real and what is Simulation
+
+**Real BACnet behaviour** - section 1b of [`main.cpp`](main.cpp), the Lighting
+Output engine: `Tracking_Value`, `In_Progress`, `Egress_Active`, `Last_On_Value`,
+every operation of Table 12-67, the halting rules of cl. 12.54.6.1 and the special
+values of Table 12-65. It runs in the example's main loop because the CAS BACnet
+Stack's customer interface hands a `Lighting_Command` to the application as plain
+numbers and stops there - the stack's own lighting engine is part of its
+test-tool interface, which a product does not ship. A real luminaire runs this
+timing itself anyway: only it knows how its driver moves.
+
+### The lamp Simulation
+
+There is no lamp on a PC. A few lines in section 1c of `main.cpp` stand in for
+one and its dimming driver - non-BACnet scaffolding, outside the BACnet Surface:
+
+- the **driver output** follows `Tracking_Value`;
+- a **blink-warn** prints `Simulation: the lamp blinks` (cl. 12.54.6.2 leaves the
+  blink itself a local matter, and it "shall not be reflected in the priority
+  array or the tracking value");
+- the **lamp can burn out**. A test-only environment variable,
+  `BLD_TEST_LAMP_BURNS_OUT=1`, makes it fail the first time it is switched on, so
+  the Wire Tests can show the Failure Mode without a lamp to break. It is not a
+  command-line option and changes nothing on the BACnet Surface.
+
+To port the example to hardware, delete section 1c, drive your dimmer from the
+engine's `trackingValue`, and set `g_lampFailed` from your driver's lamp-failure
+detection. A client can also simulate a fault **over BACnet**, the standard way:
+write `Out_Of_Service` = TRUE and `Reliability` becomes writable, "to allow
+simulating specific conditions or for testing purposes" (cl. 12.54.12).
 
 ## Two ways to drive a light
 
 The example serves both, because BACnet requires both:
 
 **1. `Present_Value`** (REAL, 0-100 %) is **commandable** - the same 16-slot
-`Priority_Array` + `Relinquish_Default` mechanism the other output objects use.
-Writing it jumps the light straight to a level. `Relinquish_Default` is `0.0`, so
+`Priority_Array` + `Relinquish_Default` mechanism every commandable object uses.
+Writing it jumps the light straight to a level (the object has no `Transition`
+property, so cl. 12.54.19 says the transition is NONE). `Relinquish_Default` is `0.0`, so
 an uncommanded light is off.
 
 **2. `Lighting_Command`** is the interesting one, and it is what makes a light a
@@ -89,17 +162,16 @@ parameters that operation needs:
 
 | Field | Type | |
 |---|---|---|
-| `operation` | enum | **mandatory** - fadeTo, rampTo, stepUp, stepDown, warn, stop, ... |
-| `target-level` | REAL 0-100 % | optional |
-| `ramp-rate` | REAL % / s | optional |
-| `step-increment` | REAL % | optional |
-| `fade-time` | Unsigned ms | optional |
-| `priority` | Unsigned 1-16 | optional |
+| `operation` | enum | **mandatory** - fadeTo, rampTo, stepUp, stepDown, stepOn, stepOff, warn, warnOff, warnRelinquish, stop, restoreOn, defaultOn, toggleRestore, toggleDefault |
+| `target-level` | REAL 0-100 % | fadeTo / rampTo (required there) |
+| `ramp-rate` | REAL 0.1-100 % / s | rampTo; else `Default_Ramp_Rate` |
+| `step-increment` | REAL 0.1-100 % | the step operations; else `Default_Step_Increment` |
+| `fade-time` | Unsigned 100-86400000 ms | fadeTo; else `Default_Fade_Time` |
+| `priority` | Unsigned 1-16 | else `Lighting_Command_Default_Priority` (16) |
 
 It tells the light **how** to get somewhere, not just where: *"fade to 75 % over
-3 seconds"* rather than *"be 75 % now"*. (This example records the "how" and
-logs it, but it has no fade engine: the level changes at once. See the note at
-the top.)
+3 seconds"* rather than *"be 75 % now"* - and the example does it over the 3
+seconds (see [the scenario](#the-scenario-a-light-that-fades)).
 
 > **Which priority does a `Lighting_Command` command at?** Its **embedded**
 > `priority` field - *not* the WriteProperty service priority you sent the request
@@ -200,14 +272,14 @@ CMake at it: `cmake -B build -S . -D CAS_STACK_DIR=/path/to/cas-bacnet-stack`.
 Expected output:
 
 ```
-BACnet B-LD (Lighting Device) Example - C++ v1.1.3
+BACnet B-LD (Lighting Device) Example - C++ v1.2.0
 CAS BACnet Stack version: 6.0.23.0
 Common helper (common/) version: 3.4.0
 FYI: Listening for BACnet/IP on UDP port 47808 (Network Port 1).
 TX 21 bytes to 192.168.3.255:47808 (broadcast) (Network Port 1) - Unconfirmed: I-Am
 FYI: Device 389016 ("Chipkin Example B-LD") ready. Vendor ID 389. Press 'h' for help.
 FYI: Lighting Output 1 (Jade) starts at 0.0% (off). WriteProperty its
-     Lighting_Command to fade/ramp/step it, or its Present_Value to set a level.
+     Lighting_Command to fade/ramp/step/warn it, or its Present_Value to set a level.
 ```
 
 The `TX` line is the start-up I-Am the device broadcasts to announce itself. It
@@ -241,8 +313,6 @@ While the example runs, these keys are available:
 |-----|--------|
 | `h` | Show the version information and this command list. |
 | `q` | Quit. |
-| up arrow | Increase Analog Input 1 (`Bronze`) by 1.1. |
-| down arrow | Decrease Analog Input 1 (`Bronze`) by 1.1. |
 
 The light is commanded over BACnet, not from the keyboard.
 
@@ -256,16 +326,18 @@ Use a BACnet client such as the
 2. **ReadProperty** `Lighting Output 1` `Present_Value` -> `0.0` (nothing has
    commanded it, so it rests at `Relinquish_Default` - the light is off).
 3. **WriteProperty** `Lighting_Command` = `{operation: fadeTo, target-level: 75.0,
-   fade-time: 3000}` -> the console logs `fadeTo 75.0% over 3000 ms` and
-   `Present_Value` (and `Tracking_Value`) read `75.0` straight away: the example
-   has no fade engine, so the level does not move over the 3 seconds.
+   fade-time: 3000}` -> the console logs `fadeTo 75.0% over 3000 ms`.
+   `Present_Value` reads `75.0` straight away (the target); read `Tracking_Value`
+   and `In_Progress` a few times in the next 3 seconds and watch the level climb
+   with `In_Progress` = `fadeActive`, then `idle` at 75.
 4. **ReadProperty** `Lighting_Command` -> the command you just sent, read back.
-5. **WriteProperty** `Lighting_Command` = `{operation: fadeTo, target-level: 50.0}`
+5. **WriteProperty** `Lighting_Command` = `{operation: fadeTo, target-level: 20.0}`
    - **no fade-time**. The console line names **3000 ms** (`Default_Fade_Time`),
-   not 0: the fade time the example resolved for the command. That is the `use*`
-   flag doing its job. The level still changes at once.
-6. **WriteProperty** `Present_Value` = `20.0` at priority 8 -> the light goes to
-   20 % directly, no fade. Both paths drive the same `Priority_Array`.
+   not 0, and the light takes 3 seconds to get there. That is the `use*` flag
+   doing its job.
+6. **WriteProperty** `Present_Value` = `50.0` at priority 8 while a fade runs ->
+   the fade is halted and the light goes to 50 % directly; relinquish priority 8
+   (write NULL) and it returns to the faded-to level at priority 16.
 7. **TimeSynchronization** -> the console logs the time the device would set.
 
 For a property-by-property review against the conformance statement, see
@@ -273,21 +345,22 @@ For a property-by-property review against the conformance statement, see
 
 ## Wire Tests
 
-Discovery, automated: a Python BACnet client drives the running example over
-BACnet/IP from outside it, the way a client discovers a device - Who-Is, the
-Device's `Object_List`, then for every object its `Property_List` and a
-ReadProperty of every property it lists. Every read must come back as a value; an
-Error, Reject or Abort fails the run. Python 3 standard library only:
+A Python BACnet client - the Peer - drives the running example over BACnet/IP
+from outside it and proves the Profile Function: it writes `Lighting_Command` and
+samples `Tracking_Value` / `In_Progress` every 0.1 s (monotonic, proportional to
+the fade time, arrival on time), measures a ramp's rate, stops a fade part-way,
+overrides it from a higher priority, runs a warn's egress time, and checks both
+Failure Modes. Each behaviour was verified to make its check fail when removed
+from `main.cpp`. Python 3 standard library only:
 
 ```bash
 python3 tests/run_wire_tests.py --exe build/BACnetExampleBLD          # Linux/macOS
 python tests\run_wire_tests.py --exe build\Release\BACnetExampleBLD.exe   # Windows
 ```
 
-It ends with `ALL WIRE TESTS PASSED` (exit 0). CI runs it on Linux after the
-smoke test. [tests/README.md](tests/README.md) says what each check proves. It
-does not test the Lighting Output's behaviour (there is no fade to test yet).
-
+It ends with `ALL WIRE TESTS PASSED` (exit 0) after about a minute. CI runs it on
+Linux after the smoke test. [tests/README.md](tests/README.md) says what each
+check proves.
 
 ## The BACnet profile example series
 

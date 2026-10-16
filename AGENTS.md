@@ -68,7 +68,7 @@ instead.
 .\build\Release\BACnetExampleBLD.exe [--port 47808] [--deviceID 389016]   # Windows
 ```
 
-Interactive keys while running: `h` help, `q` quit, up/down nudge Analog Input 1.
+Interactive keys while running: `h` help, `q` quit.
 The light is commanded over BACnet, not from the keyboard.
 
 ## Conventions
@@ -83,13 +83,19 @@ The light is commanded over BACnet, not from the keyboard.
   TimeSync. **Do not add the other** - that is not what a profile example is for.
 - Do **not** add COV, alarms, scheduling, or trending. A device that *supervises*
   other lights is a B-LS - a different profile with its own example.
-- The objects and the DS-WP-B / DM-DCC-B code are **identical to B-ASC** on
-  purpose (the through-line rule: code demonstrating a shared BIBB is the same in
-  every example that has it). If you change them here, they must change in every
-  example that shares them - prefer not to.
+- The objects are **exactly the profile's set**: the Device, Lighting Output 1
+  and Network Port 1 (the B-ASC sensors and outputs were removed in v1.2.0). Do
+  not add objects back. The DM-DCC-B and TimeSynchronization code is shared with
+  other examples on purpose (the through-line rule); if you change it here, it
+  must change in every example that shares it - prefer not to.
 - The Lighting Output's `Present_Value` is **commandable**: never serve it
   yourself. Serve the `Priority_Array` slots + `Relinquish_Default` and let the
-  stack resolve it - exactly as for the Analog Output.
+  stack resolve it.
+- **Section 1b of `main.cpp` (the lighting engine) is real BACnet behaviour;
+  section 1c is the lamp Simulation.** Keep them apart. Every write path that
+  touches the Priority_Array calls `HaltIfWriteOverrides()` first (cl.
+  12.54.6.1). The test-only hook `BLD_TEST_LAMP_BURNS_OUT=1` is an environment
+  variable, never a command-line option.
 - **Never edit `common/` in this repo alone** - it is a vendored copy shared by
   every example in the series, with its own version (`COMMON_VERSION`) and
   changelog (`common/CHANGELOG.md`). To change it: edit, bump the version, add
@@ -103,7 +109,7 @@ The light is commanded over BACnet, not from the keyboard.
 
 2. **The `use*` flags are load-bearing, not decoration.** On the Set side,
    `useFadeTime == false` means *the writer omitted fade-time*, and the
-   accompanying `fadeTime` value is **meaningless**. Per cl. 12.54.9 you must then
+   accompanying `fadeTime` value is **meaningless**. Per cl. 12.54.6 Table 12-66 you must then
    apply `Default_Fade_Time` - a `fadeTo` with no fade-time fades over the
    default, it does **not** snap instantly because the value arrived as 0. The
    same holds for ramp-rate, step-increment, and priority.
@@ -125,27 +131,30 @@ calls in `main()`.
 
 ## How to verify a change
 
-The Wire Tests in `tests/` automate the discovery half of this (README "Wire
-Tests"): `python3 tests/run_wire_tests.py --exe build/BACnetExampleBLD`. Run them
-after any change. Beyond them, verification is behavioural:
+The Wire Tests in `tests/` automate most of this (README "Wire Tests",
+[tests/README.md](tests/README.md)): `python3 tests/run_wire_tests.py --exe
+build/BACnetExampleBLD`. Run them after any change, on Windows and Linux, three
+times in a row; a behavioural change also needs its check shown to fail with the
+change reverted. Beyond them, verification is behavioural:
 
 1. Build, then run one instance on a clear UDP port. If any `AddObject` or the
    `SetPropertyWritable(Lighting_Command)` call failed, the process exits non-zero
    - that alone catches a stack pinned without the adapters.
 2. With a BACnet client, **Who-Is** -> confirm **I-Am** from device 389016.
 3. **ReadProperty** every required property of every object; confirm
-   `Protocol_Revision` is 30 and `Object_List` lists all nine objects. Pay
+   `Protocol_Revision` is 30 and `Object_List` lists exactly the three objects. Pay
    attention to the Lighting Output's unusual ones: `Tracking_Value`,
    `In_Progress`, `Blink_Warn_Enable`, `Egress_Time`, `Egress_Active`,
    `Default_Fade_Time`, `Default_Ramp_Rate`, `Default_Step_Increment`,
-   `Lighting_Command_Default_Priority`.
+   `Lighting_Command_Default_Priority`, `Last_On_Value`, `Default_On_Value`,
+   `Reliability`.
 4. **WriteProperty** `Lighting_Command` = `{fadeTo, target-level 75.0, fade-time
-   3000}`, then read `Present_Value` (75.0) and `Lighting_Command` (reads back).
-   The level is there at once: this example has no fade engine, `Tracking_Value`
-   always equals `Present_Value` and `In_Progress` is always `idle`. Do not
-   document a fade over time until the code does one.
+   3000}`, then read `Present_Value` (75.0 at once - the target) and
+   `Lighting_Command` (reads back). Read `Tracking_Value` and `In_Progress`
+   during the next 3 s: the level climbs with `fadeActive`, then `idle` at 75.
 5. **The regression that matters:** write `{fadeTo, target-level 50.0}` with **no
-   fade-time** and confirm the log shows **3000 ms** (`Default_Fade_Time`), not 0.
+   fade-time** and confirm the log shows **3000 ms** (`Default_Fade_Time`), not 0,
+   and that the fade takes that long.
 6. Write `target-level` = 150.0 -> confirm `value-out-of-range`.
 7. Confirm services that are not enabled (e.g. ReadPropertyMultiple, SubscribeCOV,
    UTCTimeSynchronization) are rejected.
