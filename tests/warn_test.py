@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-LD Wire Test: blink-warn holds the light for Egress_Time, then lets it go (cl. 12.54).
 
-    python3 tests/warn_test.py [--exe build/BACnetExampleBLD] [--port 48020]
+    python3 tests/warn_test.py [--exe build/BACnetExampleBLD] [--port 47830]
 
 ANSI/ASHRAE 135-2024:
   Table 12-67 WARN_RELINQUISH "Executes a blink-warn notification at the specified

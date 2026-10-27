@@ -1,0 +1,336 @@
+{
+  "capabilities": {
+    "maxApduLength": 1476,
+    "maxSegmentsAccepted": 16,
+    "objectTypesSupported": [
+      "device",
+      "lightingOutput",
+      "networkPort"
+    ],
+    "segmentation": "both",
+    "servicesExecuted": [
+      "readProperty",
+      "writeProperty",
+      "deviceCommunicationControl",
+      "timeSynchronization",
+      "whoHas",
+      "whoIs"
+    ],
+    "servicesSupported": [
+      "readProperty",
+      "writeProperty",
+      "deviceCommunicationControl",
+      "iAm",
+      "iHave",
+      "timeSynchronization",
+      "whoHas",
+      "whoIs"
+    ]
+  },
+  "conflicts": [],
+  "declared": {
+    "bibbs": [
+      "DS-RP-B",
+      "DS-WP-B",
+      "DS-LO-B",
+      "DM-DDB-B",
+      "DM-DOB-B",
+      "DM-DCC-B",
+      "DM-TS-B"
+    ],
+    "options": {
+      "3.54::Supports blink-warn": "Blink_Warn_Enable is TRUE and Lighting_Command warn / warnOff / warnRelinquish blink and wait Egress_Time (main.cpp section 1b; Wire Test warn_test.py).",
+      "3.54::Supports configurable Out_Of_Service property": "Lighting Output 1 Out_Of_Service is writable (main.cpp writableProperties[], PICS section 11).",
+      "4.6::Contains commandable properties": "Lighting Output 1 Present_Value is commandable (16-slot Priority_Array, Relinquish_Default 0.0).",
+      "4.6::Contains writable BOOLEAN properties": "Lighting Output 1 Out_Of_Service (BOOLEAN) is writable (cl. 12.54.12).",
+      "4.6::Contains writable REAL properties": "Lighting Output 1 Present_Value, Default_Ramp_Rate and Default_Step_Increment (REAL) are writable, range-checked.",
+      "4.6::Contains writable Unsigned properties": "Lighting Output 1 Default_Fade_Time and Egress_Time (Unsigned) are writable, range-checked.",
+      "4.6::Contains writable non-array properties": "Lighting Output 1 Present_Value, Lighting_Command, Default_Fade_Time, Default_Ramp_Rate, Default_Step_Increment, Egress_Time and Out_Of_Service are writable non-array properties (main.cpp: SetPropertyWritable, writableProperties[]).",
+      "4.6::Contains writable properties with non-basic data types": "Lighting Output 1 Lighting_Command (BACnetLightingCommand) is writable; writing it commands the light (DS-LO-B).",
+      "8.14::Supports receiving a DeviceCommunicationControl service request with an indefinite duration": "The DeviceCommunicationControl callback accepts a request with no Time_Duration (useTimeDuration false); the stack runs the state machine."
+    },
+    "source": "operator"
+  },
+  "discovered": {
+    "capturedAt": "2026-10-22T00:41:15.303Z",
+    "readDeviceProperties": {
+      "applicationSoftwareVersion": "1.2.0",
+      "firmwareRevision": "6.0.23.0",
+      "modelName": "CAS BACnet Stack Example - B-LD",
+      "objectName": "Chipkin Example B-LD",
+      "protocolRevision": 30,
+      "protocolVersion": 1,
+      "vendorId": 389,
+      "vendorName": "Chipkin Automation Systems"
+    },
+    "whoIsResults": [
+      {
+        "deviceInstance": 389016,
+        "maxApdu": 1476,
+        "segmentation": "both",
+        "vendorId": 389
+      }
+    ]
+  },
+  "identity": {
+    "applicationSoftwareVersion": "1.2.0",
+    "deviceInstance": 389016,
+    "firmwareRevision": "6.0.23.0",
+    "modelName": "CAS BACnet Stack Example - B-LD",
+    "objectName": "Chipkin Example B-LD",
+    "protocolRevision": 30,
+    "protocolVersion": 1,
+    "vendorId": 389,
+    "vendorName": "Chipkin Automation Systems"
+  },
+  "network": {
+    "address": {
+      "ip": "127.0.0.1",
+      "port": 47830
+    },
+    "transport": "bacnetIp"
+  },
+  "objects": [
+    {
+      "objectIdentifier": {
+        "instance": 389016,
+        "type": "device"
+      },
+      "objectName": "Chipkin Example B-LD",
+      "properties": {
+        "databaseRevision": {
+          "tag": "unsignedInt",
+          "value": 3
+        },
+        "maxApduLengthAccepted": {
+          "tag": "unsignedInt",
+          "value": 1476
+        },
+        "protocolRevision": {
+          "tag": "unsignedInt",
+          "value": 30
+        },
+        "protocolVersion": {
+          "tag": "unsignedInt",
+          "value": 1
+        },
+        "vendorIdentifier": {
+          "tag": "unsignedInt",
+          "value": 389
+        }
+      }
+    },
+    {
+      "commandable": true,
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "lightingOutput"
+      },
+      "objectName": "Jade",
+      "properties": {
+        "blinkWarnEnable": {
+          "tag": "boolean",
+          "value": true
+        },
+        "defaultOnValue": {
+          "tag": "real",
+          "value": 100
+        },
+        "lightingCommandDefaultPriority": {
+          "tag": "unsignedInt",
+          "value": 16
+        },
+        "outOfService": {
+          "tag": "boolean",
+          "value": false
+        },
+        "relinquishDefault": {
+          "tag": "real",
+          "value": 0
+        }
+      },
+      "writable": true
+    },
+    {
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "networkPort"
+      },
+      "objectName": "Vermilion",
+      "properties": {
+        "apduLength": {
+          "tag": "unsignedInt",
+          "value": 1476
+        },
+        "networkType": {
+          "name": "ipv4",
+          "tag": "enumerated",
+          "value": 5
+        },
+        "outOfService": {
+          "tag": "boolean",
+          "value": false
+        },
+        "protocolLevel": {
+          "name": "bacnetApplication",
+          "tag": "enumerated",
+          "value": 2
+        }
+      }
+    }
+  ],
+  "provenance": {
+    "epicsHeader": {
+      "characterSetsSupported": "derived",
+      "dataLinkOptions": "derived",
+      "deviceProfile": "user-entered",
+      "productDescription": "user-entered",
+      "specialFunctionality": "derived"
+    },
+    "generatedAt": "2026-10-22T00:41:15.303Z",
+    "snapshotCapturedAt": "2026-10-22T00:41:15.303Z",
+    "testPoints": 5
+  },
+  "testDatabase": {
+    "commandableTestPoints": [
+      {
+        "defaultPriority": 16,
+        "objectIdentifier": {
+          "instance": 1,
+          "type": "lightingOutput"
+        },
+        "propertyIdentifier": "presentValue"
+      }
+    ],
+    "deviceConfigurationScenario": {
+      "notes": "The Device object is the only object whose identity can change, and only by start-up configuration: restart the example with --deviceID <n> or --deviceName <text>. A WriteProperty to the Device's Object_Name or Object_Identifier is refused (write-access-denied), so nothing changes over the network.",
+      "objectNameChangeMethod": "replaceConfiguration",
+      "safeAlternateObjectIdentifier": {
+        "instance": 389916,
+        "type": "device"
+      },
+      "safeAlternateObjectName": "Chipkin Example B-LD Alt"
+    },
+    "identityMutationTestPoints": [
+      {
+        "notes": "The Device object is the only object whose identity can change, and only by start-up configuration: restart the example with --deviceID <n> or --deviceName <text>. A WriteProperty to the Device's Object_Name or Object_Identifier is refused (write-access-denied), so nothing changes over the network.",
+        "objectIdentifier": {
+          "instance": 389016,
+          "type": "device"
+        },
+        "safeAlternateObjectIdentifier": {
+          "instance": 389916,
+          "type": "device"
+        },
+        "safeAlternateObjectName": "Chipkin Example B-LD Alt"
+      }
+    ],
+    "initiatedServices": [
+      "iAm",
+      "iHave"
+    ],
+    "networkPort": {
+      "activeOne": {
+        "objectIdentifier": {
+          "instance": 1,
+          "type": "networkPort"
+        }
+      }
+    },
+    "objectDeletion": "none",
+    "passwords": {},
+    "rebootWindow": {
+      "activateChangesMs": 30000,
+      "coldstartMs": 60000,
+      "warmstartMs": 30000
+    },
+    "remoteWhoHasExecution": {
+      "allowedResponseNpdus": [
+        {
+          "destination": {
+            "dnet": 65535
+          }
+        },
+        {
+          "destination": {
+            "dnet": 99
+          }
+        },
+        {
+          "destination": {
+            "dadr": "01",
+            "dnet": 99
+          }
+        }
+      ],
+      "notes": [
+        "TD-side choice for the remote-network Who-Has / Who-Is rows (135.1 9.32.2.x, 9.33.2.x): remote network X = 99, source address Y = 01. The allowed response paths are the clause three: global broadcast, remote broadcast to X, the TD on X."
+      ],
+      "requestNpdu": {
+        "destination": {
+          "dnet": "globalBroadcast"
+        },
+        "source": {
+          "sadr": "01",
+          "snet": 99
+        }
+      }
+    },
+    "timeouts": {
+      "apdu": 3000,
+      "reply": 1000,
+      "segment": 1000
+    },
+    "writableTestPoints": [
+      {
+        "maxRealValue": 100,
+        "notes": "Light level, REAL 0.0 .. 100.0 %; commandable (Priority_Array, Relinquish_Default 0.0). Outside 0 .. 100 (other than the Table 12-65 special values -1.0 .. -7.0) is value-out-of-range.",
+        "objectIdentifier": {
+          "instance": 1,
+          "type": "lightingOutput"
+        },
+        "propertyIdentifier": "presentValue",
+        "suggestedTestValue": 50,
+        "writePriority": 16
+      },
+      {
+        "notes": "Default_Fade_Time, Unsigned ms, 100 .. 86400000, else value-out-of-range; not commandable.",
+        "objectIdentifier": {
+          "instance": 1,
+          "type": "lightingOutput"
+        },
+        "propertyIdentifier": "defaultFadeTime",
+        "suggestedTestValue": 5000
+      },
+      {
+        "maxRealValue": 100,
+        "notes": "Default_Ramp_Rate, REAL %/s, 0.1 .. 100.0, else value-out-of-range; not commandable.",
+        "objectIdentifier": {
+          "instance": 1,
+          "type": "lightingOutput"
+        },
+        "propertyIdentifier": "defaultRampRate",
+        "suggestedTestValue": 20
+      },
+      {
+        "maxRealValue": 100,
+        "notes": "Default_Step_Increment, REAL %, 0.1 .. 100.0, else value-out-of-range; not commandable.",
+        "objectIdentifier": {
+          "instance": 1,
+          "type": "lightingOutput"
+        },
+        "propertyIdentifier": "defaultStepIncrement",
+        "suggestedTestValue": 10
+      },
+      {
+        "notes": "Egress_Time, Unsigned seconds; not commandable.",
+        "objectIdentifier": {
+          "instance": 1,
+          "type": "lightingOutput"
+        },
+        "propertyIdentifier": "egressTime",
+        "suggestedTestValue": 60
+      }
+    ]
+  }
+}

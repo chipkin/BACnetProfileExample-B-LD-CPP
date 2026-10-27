@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-LD Wire Test: stop holds a fade; priorities arbitrate fades and writes (cl. 12.54).
 
-    python3 tests/stop_priority_test.py [--exe build/BACnetExampleBLD] [--port 48020]
+    python3 tests/stop_priority_test.py [--exe build/BACnetExampleBLD] [--port 47830]
 
 ANSI/ASHRAE 135-2024:
   Table 12-67 STOP "Stops any FADE_TO or RAMP_TO command in progress at the specified

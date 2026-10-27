@@ -23,7 +23,7 @@ python3 tests/run_wire_tests.py --exe build/BACnetExampleBLD
 
 On Windows, `--exe build\Release\BACnetExampleBLD.exe`. It ends with
 `ALL WIRE TESTS PASSED` (exit 0) or the scripts that failed, after about a
-minute. `--port` (default 48020) is the UDP port the test starts the example on.
+minute. `--port` (default 47830, this example's own port) is the UDP port the test starts the example on.
 CI (`.github/workflows/release.yml`) runs it on Linux after the smoke test. Each
 script also runs on its own with the same arguments.
 
@@ -68,6 +68,34 @@ run stays short; the checks sample `Tracking_Value` and `In_Progress` every
    and fails the check.
 4. Network Port 1's `IP_DNS_Server`, `FD_BBMD_Address` and
    `FD_Subscription_Lifetime` are listed and read (B-SS-CPP #20, #21, #22).
+5. Device **`Database_Revision`** reads 3: the stack adds one per object added at
+   start-up (cl. 12.11), and nothing changes the object database afterwards.
+
+## `configuration_test.py` - the Device's identity is configurable
+
+BACnet requires the Device's Object_Identifier and Object_Name to be
+configurable (135-2024 cl. 12.1.1.3, 12.1.1.4); Object_Name must be unique
+across the internetwork, so two units cannot share a compile-time name. The
+light is started three ways, and its help is checked:
+
+1. **No options (control):** Device 389016 answers Who-Is, and its
+   `Object_Name` is the default `Chipkin Example B-LD`.
+2. **`--deviceID 389916 --deviceName "Chipkin Example B-LD Unit 2"`:** the
+   device answers Who-Is as 389916; `Object_Name` reads the configured name;
+   a read of Device 389016 gets Error OBJECT / UNKNOWN_OBJECT (1/31); the
+   ready line names the configured device; a Who-Has by the configured name
+   gets an I-Have from Device 389916 with that name (DM-DOB-B).
+3. **Boundaries:** an empty name and a 256-byte name each print a warning and
+   keep the default; a 255-byte name (the limit) reads back whole.
+4. **The command line:** `--help` lists `--port`, `--deviceID`, `--deviceName`
+   and `--xml`, and not `--dcc-password` (the DeviceCommunicationControl
+   password is set in `main.cpp`, not on the command line); with `--xml` the
+   console shows each frame as an XML block.
+
+Against the binary from before `--deviceName` (2026-10-23, Windows) it fails 6
+of 12 checks (the configured name, the ready line, the Who-Has, both warnings,
+the 255-byte name); against the binary before `--xml` and the help fix, 2 of 18
+(the help lists `--dcc-password`; no XML).
 
 ## `fade_test.py` - fadeTo takes its fade time (Table 12-67, cl. 12.54.4, 12.54.5)
 

@@ -54,7 +54,7 @@ commands above.
 This example **requires** a stack containing the `Lighting_Command` typed
 adapters (`BACnetStack_RegisterCallbackGetPropertyLightingCommand` /
 `...SetPropertyLightingCommand`), present at the pinned commit
-(`submodules/cas-bacnet-stack` @ `64b2cfac5`, `6.x`). Without them,
+(`submodules/cas-bacnet-stack` @ `69b6249f`, `6.x`). Without them,
 `Lighting_Command` - a **required** property of the object that *defines* this
 profile - cannot be served at all: the read hits `Unsupported datatype for
 callbacks`. Do not "fix" a build failure against an older pin by removing
@@ -64,8 +64,8 @@ instead.
 ## Run
 
 ```bash
-./build/BACnetExampleBLD [--port 47808] [--deviceID 389016]   # Linux/macOS
-.\build\Release\BACnetExampleBLD.exe [--port 47808] [--deviceID 389016]   # Windows
+./build/BACnetExampleBLD [--port 47808] [--deviceID 389016] [--deviceName "Chipkin Example B-LD"]   # Linux/macOS
+.\build\Release\BACnetExampleBLD.exe [--port 47808] [--deviceID 389016] [--deviceName "Chipkin Example B-LD"]   # Windows
 ```
 
 Interactive keys while running: `h` help, `q` quit.
@@ -117,17 +117,13 @@ The light is commanded over BACnet, not from the keyboard.
 Watch the units - they are inconsistent by spec: `Default_Fade_Time` and
 `fade-time` are **milliseconds**; `Egress_Time` is **seconds**.
 
-## Known limitation: Local_Date / Local_Time
+## Local_Date / Local_Time
 
-`GetPropertyDate`/`GetPropertyTime` are implemented and backed by
-`g_syncedDateTime`, but neither `Local_Date` nor `Local_Time` is ever turned on
-with `BACnetStack_SetPropertyEnabled` - both are OPTIONAL Device properties, and
-an optional property the app never explicitly enables is unreachable dead code
-(same class of bug the `Description` comment in `main.cpp` warns about). See
-[TUTORIAL.md](TUTORIAL.md#known-limitation-local_date--local_time-are-dead-code)
-for the full explanation before you "fix" this by editing `docs/objects.json`
-alone - the actual fix, if you want one, is the missing `SetPropertyEnabled`
-calls in `main()`.
+`GetPropertyDate`/`GetPropertyTime` serve both from `g_syncedDateTime`. You do
+not enable them with `BACnetStack_SetPropertyEnabled`: the stack enables both
+when `main()` enables `SERVICE_TIME_SYNCHRONIZATION` (Table 12-13 footnotes 3
+and 4). See
+[TUTORIAL.md](TUTORIAL.md#local_date--local_time-follow-timesynchronization).
 
 ## How to verify a change
 

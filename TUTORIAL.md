@@ -29,7 +29,9 @@ The example is intentionally small so it's easy to change.
 **Change the device identity before you ship** - vendor ID, vendor name, model
 name, description, firmware revision, device name and the DeviceCommunicationControl
 password are all in the `CHANGE ALL OF THIS BEFORE YOU SHIP` block at the top of
-`main.cpp`, with a per-field note on each saying what to change it to. That block
+`main.cpp`, with a per-field note on each saying what to change it to. The device
+name there is only the default: each unit takes its own with `--deviceName` at
+start-up, as it takes its instance with `--deviceID`. That block
 is the authoritative checklist; it is in the source rather than here so it cannot
 be skipped by someone who only reads the code.
 
@@ -260,33 +262,27 @@ rather than against "it looked fine in the explorer":
    light snaps instead of fading, ignores a stop, lets a lower priority override
    a fade, or skips an egress time.
 
-### Known limitation: Local_Date / Local_Time are dead code
+### Local_Date / Local_Time follow TimeSynchronization
 
 `main.cpp` implements `GetPropertyDate` and `GetPropertyTime`, backed by
 `g_syncedDateTime`, and `SetSystemTime` (the `TimeSynchronization` handler)
-keeps that struct up to date - `CHANGELOG.md` describes this as fixed and
-wire-tested. **But `Local_Date` and `Local_Time` are OPTIONAL Device
-properties**, and nothing in `main.cpp` calls
-`BACnetStack_SetPropertyEnabled(g_deviceInstance, OBJECT_TYPE_DEVICE,
-g_deviceInstance, PROPERTY_IDENTIFIER_LOCAL_DATE / LOCAL_TIME, true)` for
-either one - the same enable this file's own comment above the `SetPropertyEnabled`
-calls warns about for `Description` ("a Description branch in the callback
-without this enable is DEAD CODE"). The stack's `IsPropertyEnabled` check
-(`BACnetDBObject::IsPropertyEnabled`) only returns true for a property present
-in the object's enabled-property list; an optional property that was never
-explicitly enabled is not in that list. So as shipped, a `ReadProperty` of
-`Local_Date` or `Local_Time` never reaches `GetPropertyDate`/`GetPropertyTime`
-at all - the stack answers `unknown-property` first. `docs/objects.json` and
-`docs/PICS.md` record this precisely rather than listing the two properties as
-served: see the Device object's note in [docs/PICS.md](docs/PICS.md#11-objects-and-properties).
-If you need `Local_Date`/`Local_Time` to actually answer, add the two
-`SetPropertyEnabled` calls next to the `Description` one in `main()`.
+keeps that struct up to date; at start-up it is seeded from the host clock.
+`Local_Date` and `Local_Time` are OPTIONAL Device properties, but Table 12-13
+footnotes 3 and 4 say they shall be present on a device that executes
+TimeSynchronization. The stack does that for you: when `main()` calls
+`BACnetStack_SetServiceEnabled(..., SERVICE_TIME_SYNCHRONIZATION, true)`, the
+stack enables both properties on the Device object, so they are in its
+`Property_List` and a `ReadProperty` of either reaches the callbacks. No
+`SetPropertyEnabled` call is needed in `main.cpp`. (Up to and including the
+example's v1.2.0 documentation this section said the two properties answered
+`unknown-property`; at this stack pin the device serves both - read them back after a
+TimeSynchronization.)
 
 ### Keeping the PICS honest
 
 `docs/PICS.md` is partly generated. `docs/objects.json` describes each object and
 who serves which property; the series tool regenerates the object tables from it
-plus the stack's own `docs/property-profile-reference.md` at the pinned commit:
+plus the CAS BACnet Stack's property profiles (a reference the series tool vendors):
 
 ```bash
 python tools/gen-objects-properties.py BACnetProfileExample-B-LD-CPP            # rewrite
@@ -302,9 +298,8 @@ in the same change and regenerate. The `app` list is what the callbacks serve;
 `accepted` is for a required property you deliberately leave to the stack's
 default, and each one needs a justification. Anything required, not in `app` and
 not in `accepted`, comes out as a ⚠ row - that is a defect, not a feature. (An
-*optional* property that is served but never enabled, like `Local_Date` /
-`Local_Time` above, does not trigger a ⚠ - the generator only checks required
-properties - so it is called out here in prose instead.)
+*optional* property that is served but never enabled does not trigger a ⚠ - the
+generator only checks required properties - so check those by hand.)
 
 ## Troubleshooting
 
@@ -320,5 +315,5 @@ properties - so it is called out here in prose instead.)
 | Replies show an unexpected device instance or vendor | Another BACnet device is already answering on this host/port. On Linux/macOS two processes can share the port and both reply; on Windows the example asks for `SO_EXCLUSIVEADDRUSE` (`common/SimpleUDP.cpp`) so this shows up as a bind failure instead. Stop the other device, or use `--port`. |
 | `WriteProperty Lighting_Command` accepted but the light never reaches the target level | Check the response: a `target-level` outside 0-100 %, or a `priority` outside 1-16, is rejected with `value-out-of-range`; a `fadeTo`/`rampTo` with no `target-level` is rejected the same way (Table 12-67 makes it a required field). If the write really was accepted, re-read `Present_Value` and `Current_Command_Priority` - a fadeTo written at a priority that is not in control is stored in its slot but not executed (Table 12-67). |
 | `Tracking_Value` differs from `Present_Value` | Expected while `In_Progress` is `fadeActive` or `rampActive`: `Present_Value` is the target, `Tracking_Value` the level on its way there (cl. 12.54.4, 12.54.5). They are equal again when `In_Progress` reads `idle`. |
-| `ReadProperty Local_Date` or `Local_Time` returns `unknown-property` even though `main.cpp` has `GetPropertyDate`/`GetPropertyTime` | This is the [known limitation](#known-limitation-local_date--local_time-are-dead-code) above, not a new bug - neither property is ever enabled with `SetPropertyEnabled`. |
+| `ReadProperty Local_Date` or `Local_Time` returns `unknown-property` even though `main.cpp` has `GetPropertyDate`/`GetPropertyTime` | The stack only enables them when `SERVICE_TIME_SYNCHRONIZATION` (or the UTC variant) is enabled; check that `main()` still enables it. See [Local_Date / Local_Time](#local_date--local_time-follow-timesynchronization). |
 | `UTCTimeSynchronization` is rejected | By design. This example enables only `SERVICE_TIME_SYNCHRONIZATION` (the profile allows DM-TS-B *or* DM-UTC-B, not both); the stack itself rejects the UTC variant with *"Services is not supported service=[9]"* before `main.cpp` is ever reached. |

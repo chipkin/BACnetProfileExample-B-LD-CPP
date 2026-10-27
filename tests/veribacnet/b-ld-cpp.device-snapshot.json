@@ -1,0 +1,863 @@
+{
+  "capturedAt": "2026-10-22T00:41:15.303Z",
+  "derivedBibbs": [
+    "DM-DCC-B",
+    "DM-DDB-B",
+    "DM-DOB-B",
+    "DM-TS-B",
+    "DS-RP-B",
+    "DS-WP-B"
+  ],
+  "errors": [],
+  "iam": {
+    "deviceInstance": 389016,
+    "maxApdu": 1476,
+    "segmentation": "both",
+    "vendorId": 389
+  },
+  "identity": {
+    "applicationSoftwareVersion": "1.2.0",
+    "firmwareRevision": "6.0.23.0",
+    "modelName": "CAS BACnet Stack Example - B-LD",
+    "objectName": "Chipkin Example B-LD",
+    "protocolRevision": 30,
+    "protocolVersion": 1,
+    "vendorId": 389,
+    "vendorName": "Chipkin Automation Systems"
+  },
+  "maxApduLengthAccepted": 1476,
+  "objectTypesSupported": [
+    "device",
+    "lightingOutput",
+    "networkPort"
+  ],
+  "objects": [
+    {
+      "objectIdentifier": {
+        "instance": 389016,
+        "type": "device"
+      },
+      "properties": {
+        "apduSegmentTimeout": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 5000
+          }
+        },
+        "apduTimeout": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 10000
+          }
+        },
+        "applicationSoftwareVersion": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "1.2.0"
+          }
+        },
+        "databaseRevision": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 3
+          }
+        },
+        "description": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "Chipkin CAS BACnet Stack Example - B-LD (Lighting Device) profile. A luminaire with a commandable Lighting Output that fades, ramps, steps and blink-warns as Lighting_Command tells it to, plus DeviceCommunicationControl and time synchronisation (DM-TS-B)."
+          }
+        },
+        "deviceAddressBinding": {
+          "status": "ok",
+          "value": {
+            "tag": "constructed",
+            "value": []
+          }
+        },
+        "firmwareRevision": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "6.0.23.0"
+          }
+        },
+        "localDate": {
+          "status": "ok",
+          "value": {
+            "tag": "date",
+            "value": {
+              "day": 21,
+              "month": 10,
+              "weekday": 3,
+              "year": 2026
+            }
+          }
+        },
+        "localTime": {
+          "status": "ok",
+          "value": {
+            "tag": "time",
+            "value": {
+              "hour": 17,
+              "hundredths": 0,
+              "minute": 41,
+              "second": 8
+            }
+          }
+        },
+        "maxApduLengthAccepted": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 1476
+          }
+        },
+        "maxSegmentsAccepted": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 16
+          }
+        },
+        "modelName": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "CAS BACnet Stack Example - B-LD"
+          }
+        },
+        "numberOfApduRetries": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 0
+          }
+        },
+        "objectIdentifier": {
+          "status": "ok",
+          "value": {
+            "tag": "objectIdentifier",
+            "value": {
+              "instance": 389016,
+              "type": "device"
+            }
+          }
+        },
+        "objectList": {
+          "status": "ok",
+          "value": {
+            "tag": "constructed",
+            "value": [
+              {
+                "tag": "objectIdentifier",
+                "value": {
+                  "instance": 389016,
+                  "type": "device"
+                }
+              },
+              {
+                "tag": "objectIdentifier",
+                "value": {
+                  "instance": 1,
+                  "type": "lightingOutput"
+                }
+              },
+              {
+                "tag": "objectIdentifier",
+                "value": {
+                  "instance": 1,
+                  "type": "networkPort"
+                }
+              }
+            ]
+          }
+        },
+        "objectName": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "Chipkin Example B-LD"
+          }
+        },
+        "protocolObjectTypesSupported": {
+          "status": "ok",
+          "value": {
+            "tag": "bitString",
+            "value": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              true,
+              false,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ]
+          }
+        },
+        "protocolRevision": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 30
+          }
+        },
+        "protocolServicesSupported": {
+          "status": "ok",
+          "value": {
+            "tag": "bitString",
+            "value": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              true,
+              false,
+              false,
+              true,
+              false,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              true,
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ]
+          }
+        },
+        "protocolVersion": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 1
+          }
+        },
+        "segmentationSupported": {
+          "status": "ok",
+          "value": {
+            "name": "segmentedBoth",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "systemStatus": {
+          "status": "ok",
+          "value": {
+            "name": "operational",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "vendorIdentifier": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 389
+          }
+        },
+        "vendorName": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "Chipkin Automation Systems"
+          }
+        }
+      },
+      "propertyList": [
+        "apduSegmentTimeout",
+        "apduTimeout",
+        "applicationSoftwareVersion",
+        "description",
+        "deviceAddressBinding",
+        "firmwareRevision",
+        "localDate",
+        "localTime",
+        "maxApduLengthAccepted",
+        "modelName",
+        "numberOfApduRetries",
+        "objectList",
+        "protocolObjectTypesSupported",
+        "protocolServicesSupported",
+        "protocolVersion",
+        "segmentationSupported",
+        "systemStatus",
+        "vendorIdentifier",
+        "vendorName",
+        "protocolRevision",
+        "databaseRevision",
+        "maxSegmentsAccepted"
+      ]
+    },
+    {
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "lightingOutput"
+      },
+      "properties": {
+        "blinkWarnEnable": {
+          "status": "ok",
+          "value": {
+            "tag": "boolean",
+            "value": true
+          }
+        },
+        "currentCommandPriority": {
+          "detail": {
+            "kind": "decode",
+            "message": "ReadProperty-ACK for lightingOutput:1 currentCommandPriority has a PropertyValue shape the decoder does not handle: {\"_context\":\"3\",\"OptionalUnsigned\":{\"NULL\":{\"_datatype\":\"0\",\"_datatypeLabel\":\"Null\"}}}",
+            "path": "rp"
+          },
+          "reason": "decode failed: ReadProperty-ACK for lightingOutput:1 currentCommandPriority has a PropertyValue shape the decoder does not handle: {\"_context\":\"3\",\"OptionalUnsigned\":{\"NULL\":{\"_datatype\":\"0\",\"_datatypeLabel\":\"Null\"}}}",
+          "status": "error"
+        },
+        "defaultFadeTime": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 3000
+          }
+        },
+        "defaultOnValue": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 100
+          }
+        },
+        "defaultRampRate": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 10
+          }
+        },
+        "defaultStepIncrement": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 5
+          }
+        },
+        "egressActive": {
+          "status": "ok",
+          "value": {
+            "tag": "boolean",
+            "value": false
+          }
+        },
+        "egressTime": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 30
+          }
+        },
+        "inProgress": {
+          "status": "ok",
+          "value": {
+            "name": "idle",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "lastOnValue": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 100
+          }
+        },
+        "lightingCommand": {
+          "detail": {
+            "kind": "decode",
+            "message": "ReadProperty-ACK for lightingOutput:1 lightingCommand has a PropertyValue shape the decoder does not handle: {\"_context\":\"3\",\"LightingCommand\":{\"Operation\":{\"_text\":\"none\",\"_context\":\"0\",\"_datatype\":\"9\",\"_datatypeLabel\":\"Enumerated\",\"_value\":\"0\"},\"TargetLevel\":{\"_text\":\"0.0\",\"_context\":\"3\",\"_datatype\":\"4\",\"_datatypeLabel\":\"Real\",\"_value\":\"0.0\"},\"RampRate\":{\"_text\":\"0.0\",\"_context\":\"3\",\"_datatype\":\"4\",\"_datatypeLabel\":\"Real\",\"_value\":\"0.0\"},\"StepIncrement\":{\"_text\":\"0.0\",\"_context\":\"3\",\"_datatype\":\"4\",\"_datatypeLabel\":\"Real\",\"_value\":\"0.0\"},\"FadeTime\":{\"_text\":\"0\",\"_context\":\"3\",\"_datatype\":\"2\",\"_datatypeLabel\":\"UnsignedInteger\",\"_value\":\"0\"},\"Priority\":{\"_text\":\"0\",\"_context\":\"3\",\"_datatype\":\"2\",\"_da…",
+            "path": "rp"
+          },
+          "reason": "decode failed: ReadProperty-ACK for lightingOutput:1 lightingCommand has a PropertyValue shape the decoder does not handle: {\"_context\":\"3\",\"LightingCommand\":{\"Operation\":{\"_text\":\"none\",\"_context\":\"0\",\"_datatype\":\"9\",\"_datatypeLabel\":\"Enumerated\",\"_value\":\"0\"},\"TargetLevel\":{\"_text\":\"0.0\",\"_context\":\"3\",\"_datatype\":\"4\",\"_datatypeLabel\":\"Real\",\"_value\":\"0.0\"},\"RampRate\":{\"_text\":\"0.0\",\"_context\":\"3\",\"_datatype\":\"4\",\"_datatypeLabel\":\"Real\",\"_value\":\"0.0\"},\"StepIncrement\":{\"_text\":\"0.0\",\"_context\":\"3\",\"_datatype\":\"4\",\"_datatypeLabel\":\"Real\",\"_value\":\"0.0\"},\"FadeTime\":{\"_text\":\"0\",\"_context\":\"3\",\"_datatype\":\"2\",\"_datatypeLabel\":\"UnsignedInteger\",\"_value\":\"0\"},\"Priority\":{\"_text\":\"0\",\"_context\":\"3\",\"_datatype\":\"2\",\"_da…",
+          "status": "error"
+        },
+        "lightingCommandDefaultPriority": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 16
+          }
+        },
+        "objectIdentifier": {
+          "status": "ok",
+          "value": {
+            "tag": "objectIdentifier",
+            "value": {
+              "instance": 1,
+              "type": "lightingOutput"
+            }
+          }
+        },
+        "objectName": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "Jade"
+          }
+        },
+        "outOfService": {
+          "status": "ok",
+          "value": {
+            "tag": "boolean",
+            "value": false
+          }
+        },
+        "presentValue": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 0
+          }
+        },
+        "priorityArray": {
+          "status": "ok",
+          "value": {
+            "tag": "constructed",
+            "value": [
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              },
+              {
+                "tag": "null"
+              }
+            ]
+          }
+        },
+        "reliability": {
+          "status": "ok",
+          "value": {
+            "name": "noFaultDetected",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "relinquishDefault": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 0
+          }
+        },
+        "statusFlags": {
+          "status": "ok",
+          "value": {
+            "tag": "bitString",
+            "value": [
+              false,
+              false,
+              false,
+              false
+            ]
+          }
+        },
+        "trackingValue": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 0
+          }
+        }
+      },
+      "propertyList": [
+        "outOfService",
+        "presentValue",
+        "priorityArray",
+        "reliability",
+        "relinquishDefault",
+        "statusFlags",
+        "trackingValue",
+        "blinkWarnEnable",
+        "defaultFadeTime",
+        "defaultRampRate",
+        "defaultStepIncrement",
+        "egressTime",
+        "inProgress",
+        "lightingCommand",
+        "lightingCommandDefaultPriority",
+        "egressActive",
+        "currentCommandPriority",
+        "defaultOnValue",
+        "lastOnValue"
+      ]
+    },
+    {
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "networkPort"
+      },
+      "properties": {
+        "apduLength": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 1476
+          }
+        },
+        "bacnetIpMode": {
+          "status": "ok",
+          "value": {
+            "name": "normal",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "bacnetIpUdpPort": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 47830
+          }
+        },
+        "changesPending": {
+          "status": "ok",
+          "value": {
+            "tag": "boolean",
+            "value": false
+          }
+        },
+        "command": {
+          "status": "ok",
+          "value": {
+            "name": "idle",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "commandValidationResult": {
+          "detail": {
+            "kind": "decode",
+            "message": "ReadProperty-ACK for networkPort:1 commandValidationResult has a PropertyValue shape the decoder does not handle: {\"_context\":\"3\",\"Health\":{\"Timestamp\":{\"_context\":\"0\",\"Date\":{\"_text\":\"Unspecified Month, Unspecified Day, Unspecified Year, Unspecified Day of Week\",\"_datatype\":\"10\",\"_datatypeLabel\":\"Date\",\"_day\":\"255\",\"_month\":\"255\",\"_weekday\":\"255\",\"_year\":\"255\"},\"Time\":{\"_text\":\"255:255:255.255\",\"_datatype\":\"11\",\"_datatypeLabel\":\"Time\",\"_hour\":\"255\",\"_hundredthSeconds\":\"255\",\"_minute\":\"255\",\"_second\":\"255\"}},\"Result\":{\"_context\":\"1\",\"ErrorClass\":{\"_text\":\"security\",\"_datatype\":\"9\",\"_datatypeLabel\":\"Enumerated\",\"_value\":\"4\"},\"ErrorCode\":{\"_text\":\"success\",\"_datatype\":\"9\",\"_datatypeLabel\":\"Enumerated\",\"_val…",
+            "path": "rp"
+          },
+          "reason": "decode failed: ReadProperty-ACK for networkPort:1 commandValidationResult has a PropertyValue shape the decoder does not handle: {\"_context\":\"3\",\"Health\":{\"Timestamp\":{\"_context\":\"0\",\"Date\":{\"_text\":\"Unspecified Month, Unspecified Day, Unspecified Year, Unspecified Day of Week\",\"_datatype\":\"10\",\"_datatypeLabel\":\"Date\",\"_day\":\"255\",\"_month\":\"255\",\"_weekday\":\"255\",\"_year\":\"255\"},\"Time\":{\"_text\":\"255:255:255.255\",\"_datatype\":\"11\",\"_datatypeLabel\":\"Time\",\"_hour\":\"255\",\"_hundredthSeconds\":\"255\",\"_minute\":\"255\",\"_second\":\"255\"}},\"Result\":{\"_context\":\"1\",\"ErrorClass\":{\"_text\":\"security\",\"_datatype\":\"9\",\"_datatypeLabel\":\"Enumerated\",\"_value\":\"4\"},\"ErrorCode\":{\"_text\":\"success\",\"_datatype\":\"9\",\"_datatypeLabel\":\"Enumerated\",\"_val…",
+          "status": "error"
+        },
+        "fdBbmdAddress": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "host-specific (not recorded)"
+          }
+        },
+        "fdSubscriptionLifetime": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 0
+          }
+        },
+        "ipAddress": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "host-specific (not recorded)"
+          }
+        },
+        "ipDefaultGateway": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "host-specific (not recorded)"
+          }
+        },
+        "ipDnsServer": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "host-specific (not recorded)"
+          }
+        },
+        "ipSubnetMask": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "host-specific (not recorded)"
+          }
+        },
+        "linkSpeed": {
+          "status": "ok",
+          "value": {
+            "tag": "real",
+            "value": 0
+          }
+        },
+        "macAddress": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "host-specific (not recorded)"
+          }
+        },
+        "networkNumber": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 0
+          }
+        },
+        "networkNumberQuality": {
+          "status": "ok",
+          "value": {
+            "name": "unknown",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "networkType": {
+          "status": "ok",
+          "value": {
+            "name": "ipv4",
+            "tag": "enumerated",
+            "value": 5
+          }
+        },
+        "objectIdentifier": {
+          "status": "ok",
+          "value": {
+            "tag": "objectIdentifier",
+            "value": {
+              "instance": 1,
+              "type": "networkPort"
+            }
+          }
+        },
+        "objectName": {
+          "status": "ok",
+          "value": {
+            "tag": "characterString",
+            "value": "Vermilion"
+          }
+        },
+        "outOfService": {
+          "status": "ok",
+          "value": {
+            "tag": "boolean",
+            "value": false
+          }
+        },
+        "protocolLevel": {
+          "status": "ok",
+          "value": {
+            "name": "bacnetApplication",
+            "tag": "enumerated",
+            "value": 2
+          }
+        },
+        "referencePort": {
+          "status": "ok",
+          "value": {
+            "tag": "unsignedInt",
+            "value": 4194303
+          }
+        },
+        "reliability": {
+          "status": "ok",
+          "value": {
+            "name": "noFaultDetected",
+            "tag": "enumerated",
+            "value": 0
+          }
+        },
+        "statusFlags": {
+          "status": "ok",
+          "value": {
+            "tag": "bitString",
+            "value": [
+              false,
+              false,
+              false,
+              false
+            ]
+          }
+        }
+      },
+      "propertyList": [
+        "outOfService",
+        "reliability",
+        "statusFlags",
+        "apduLength",
+        "ipAddress",
+        "ipDefaultGateway",
+        "ipDnsServer",
+        "bacnetIpMode",
+        "ipSubnetMask",
+        "bacnetIpUdpPort",
+        "changesPending",
+        "command",
+        "fdBbmdAddress",
+        "fdSubscriptionLifetime",
+        "linkSpeed",
+        "macAddress",
+        "networkNumber",
+        "networkNumberQuality",
+        "networkType",
+        "protocolLevel",
+        "referencePort",
+        "commandValidationResult"
+      ]
+    }
+  ],
+  "pollPath": "rp-per-property",
+  "pollWarnings": [],
+  "segmentationSupported": "segmentedBoth",
+  "servicesSupported": [
+    "readProperty",
+    "writeProperty",
+    "deviceCommunicationControl",
+    "iAm",
+    "iHave",
+    "timeSynchronization",
+    "whoHas",
+    "whoIs"
+  ],
+  "target": {
+    "address": "127.0.0.1",
+    "deviceInstance": 389016,
+    "port": 47830
+  }
+}

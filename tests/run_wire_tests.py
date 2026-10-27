@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """Run every B-LD Wire Test, one after another, and report one result.
 
-    python3 tests/run_wire_tests.py [--exe build/BACnetExampleBLD] [--port 48020]
+    python3 tests/run_wire_tests.py [--exe build/BACnetExampleBLD] [--port 47830]
 
 Exit code 0 = every check in every script passed.
 """
@@ -18,7 +18,7 @@ sys.path.insert(0, str(REPOSITORY))
 
 import wiretest  # noqa: E402  (the vendored harness at the repository root)
 
-SCRIPTS = ["discovery_test.py", "fade_test.py", "ramp_step_test.py", "stop_priority_test.py", "warn_test.py",
+SCRIPTS = ["discovery_test.py", "configuration_test.py", "fade_test.py", "ramp_step_test.py", "stop_priority_test.py", "warn_test.py",
            "failure_test.py"]
 
 
@@ -26,7 +26,7 @@ def main():
     arguments = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     arguments.add_argument("--exe", default=str(wiretest.default_exe(REPOSITORY, "BACnetExampleBLD")),
                            help="path to BACnetExampleBLD (default: build/BACnetExampleBLD)")
-    arguments.add_argument("--port", type=int, default=48020, help="the lighting device's UDP port (default 48020)")
+    arguments.add_argument("--port", type=int, default=47830, help="the lighting device's UDP port (default 47830)")
     args = arguments.parse_args()
 
     outcomes = []

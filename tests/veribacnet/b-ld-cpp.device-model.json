@@ -1,0 +1,267 @@
+{
+  "bibbs": [
+    {
+      "enabled": true,
+      "id": "DS-RP-B",
+      "provenance": "user-entered"
+    },
+    {
+      "enabled": true,
+      "id": "DS-WP-B",
+      "provenance": "user-entered"
+    },
+    {
+      "enabled": true,
+      "id": "DS-LO-B",
+      "provenance": "user-entered"
+    },
+    {
+      "enabled": true,
+      "id": "DM-DDB-B",
+      "provenance": "user-entered"
+    },
+    {
+      "enabled": true,
+      "id": "DM-DOB-B",
+      "provenance": "user-entered"
+    },
+    {
+      "enabled": true,
+      "id": "DM-DCC-B",
+      "provenance": "user-entered"
+    },
+    {
+      "enabled": true,
+      "id": "DM-TS-B",
+      "provenance": "user-entered"
+    }
+  ],
+  "epicsHeader": {
+    "characterSetsSupported": {
+      "provenance": "derived",
+      "value": "ISO 10646 (UTF-8) / ANSI X3.4"
+    },
+    "dataLinkOptions": {
+      "provenance": "derived",
+      "value": "BACnet IP, (Annex J)"
+    },
+    "deviceProfile": {
+      "provenance": "user-entered",
+      "value": "B-LD - BACnet Lighting Device"
+    },
+    "productDescription": {
+      "provenance": "user-entered",
+      "value": "A BACnet/IP luminaire built on the CAS BACnet Stack. It presents one commandable Lighting Output whose level is driven by both a 16-slot Priority_Array and the constructed Lighting_Command SEQUENCE. Every operation of Table 12-67 is carried out over time - fades over their fade time, ramps at their ramp rate, warns wait out Egress_Time - with Tracking_Value, In_Progress and Egress_Active reporting it; the lamp and dimming driver are a labelled Simulation. Plus DeviceCommunicationControl and local TimeSynchronization. It answers ReadProperty and WriteProperty for every required property of every object, and is discoverable by Who-Is / I-Am and Who-Has / I-Have. It is a tutorial for implementers of the B-LD profile."
+    },
+    "productName": {
+      "provenance": "user-entered",
+      "value": "CAS BACnet Stack Example - B-LD"
+    },
+    "specialFunctionality": {
+      "provenance": "derived",
+      "value": "none"
+    }
+  },
+  "identityMutations": [
+    {
+      "included": true,
+      "notes": "The Device object is the only object whose identity can change, and only by start-up configuration: restart the example with --deviceID <n> or --deviceName <text>. A WriteProperty to the Device's Object_Name or Object_Identifier is refused (write-access-denied), so nothing changes over the network.",
+      "objectIdentifier": {
+        "instance": 389016,
+        "type": "device"
+      },
+      "provenance": "user-entered",
+      "safeAlternateObjectIdentifier": {
+        "instance": 389916,
+        "type": "device"
+      },
+      "safeAlternateObjectName": "Chipkin Example B-LD Alt"
+    }
+  ],
+  "infra": {
+    "dccPassword": {
+      "provenance": "user-entered",
+      "value": ""
+    },
+    "failTimes": {
+      "provenance": "derived",
+      "value": [
+        [
+          "Notification Fail Time",
+          60
+        ],
+        [
+          "Internal Processing Fail Time",
+          2
+        ],
+        [
+          "Minimum ON/OFF Time",
+          2
+        ],
+        [
+          "Schedule Evaluation Fail Time",
+          2
+        ],
+        [
+          "External Command Fail Time",
+          5
+        ],
+        [
+          "Program Object State Change Fail Time",
+          5
+        ],
+        [
+          "Acknowledgement Fail Time",
+          2
+        ],
+        [
+          "Slave Proxy Confirm Interval",
+          6
+        ],
+        [
+          "Unconfirmed Response Fail Time",
+          4
+        ],
+        [
+          "Activate Changes Fail Time",
+          30
+        ],
+        [
+          "Auto Negotiation Fail Time",
+          15
+        ],
+        [
+          "Foreign Device Registration Fail Time",
+          10
+        ],
+        [
+          "Channel Write Fail Time",
+          30
+        ]
+      ]
+    },
+    "networkPortInstance": {
+      "provenance": "captured",
+      "value": 1
+    },
+    "rebootWindow": {
+      "provenance": "derived",
+      "value": {
+        "activateChangesMs": 30000,
+        "coldstartMs": 60000,
+        "warmstartMs": 30000
+      }
+    },
+    "reinitializePassword": {
+      "provenance": "user-entered",
+      "value": ""
+    },
+    "timeouts": {
+      "provenance": "derived",
+      "value": {
+        "apdu": 3000,
+        "reply": 1000,
+        "segment": 1000
+      }
+    },
+    "valueRestrictions": {
+      "provenance": "derived",
+      "value": [
+        {
+          "datatype": "unsigned-integer",
+          "kind": "range",
+          "max": 65535,
+          "min": 0
+        },
+        {
+          "datatype": "signed-integer",
+          "kind": "range",
+          "max": 2147483647,
+          "min": -2147483648
+        },
+        {
+          "datatype": "real",
+          "kind": "range",
+          "max": 3.4e+38,
+          "min": -3.4e+38,
+          "resolution": 0.01
+        },
+        {
+          "datatype": "character-string",
+          "kind": "length",
+          "max": 64
+        },
+        {
+          "datatype": "octet-string",
+          "kind": "length",
+          "max": 256
+        },
+        {
+          "datatype": "list",
+          "kind": "length",
+          "max": 10
+        }
+      ]
+    }
+  },
+  "snapshotCapturedAt": "2026-10-22T00:41:15.303Z",
+  "testPoints": [
+    {
+      "included": true,
+      "kind": "commandable",
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "lightingOutput"
+      },
+      "propertyIdentifier": "presentValue",
+      "provenance": "user-entered",
+      "suggestedTestValue": 50,
+      "writePriority": 16
+    },
+    {
+      "included": true,
+      "kind": "writable",
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "lightingOutput"
+      },
+      "propertyIdentifier": "defaultFadeTime",
+      "provenance": "user-entered",
+      "suggestedTestValue": 5000
+    },
+    {
+      "included": true,
+      "kind": "writable",
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "lightingOutput"
+      },
+      "propertyIdentifier": "defaultRampRate",
+      "provenance": "user-entered",
+      "suggestedTestValue": 20
+    },
+    {
+      "included": true,
+      "kind": "writable",
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "lightingOutput"
+      },
+      "propertyIdentifier": "defaultStepIncrement",
+      "provenance": "user-entered",
+      "suggestedTestValue": 10
+    },
+    {
+      "included": true,
+      "kind": "writable",
+      "objectIdentifier": {
+        "instance": 1,
+        "type": "lightingOutput"
+      },
+      "propertyIdentifier": "egressTime",
+      "provenance": "user-entered",
+      "suggestedTestValue": 60
+    }
+  ],
+  "updatedAt": "2026-10-22T00:41:30.407Z"
+}

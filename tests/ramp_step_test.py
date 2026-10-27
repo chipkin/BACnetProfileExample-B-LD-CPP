@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-LD Wire Test: rampTo moves at its ramp rate; the step commands step (cl. 12.54).
 
-    python3 tests/ramp_step_test.py [--exe build/BACnetExampleBLD] [--port 48020]
+    python3 tests/ramp_step_test.py [--exe build/BACnetExampleBLD] [--port 47830]
 
 ANSI/ASHRAE 135-2024 Table 12-67:
   RAMP_TO "continues by changing the physical lighting output proportionally from its

@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-LD Wire Test: the Failure Modes cl. 12.54 defines (DS-LO-B).
 
-    python3 tests/failure_test.py [--exe build/BACnetExampleBLD] [--port 48020]
+    python3 tests/failure_test.py [--exe build/BACnetExampleBLD] [--port 47830]
 
 1. A bad command is refused and changes nothing. ANSI/ASHRAE 135-2024 cl. 12.54.6:
    "Lighting commands written with a required or optional field, explicitly specified

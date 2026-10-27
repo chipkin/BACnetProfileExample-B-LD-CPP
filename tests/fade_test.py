@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-LD Wire Test: a fadeTo fades the light over its fade time (DS-LO-B, cl. 12.54).
 
-    python3 tests/fade_test.py [--exe build/BACnetExampleBLD] [--port 48020]
+    python3 tests/fade_test.py [--exe build/BACnetExampleBLD] [--port 47830]
 
 ANSI/ASHRAE 135-2024 Table 12-67, FADE_TO: "the fade operation continues by changing
 the physical lighting output proportionally from its current value to target-level,

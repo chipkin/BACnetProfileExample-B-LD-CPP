@@ -33,7 +33,7 @@ from wiretest import application_real, application_unsigned  # noqa: E402,F401
 DEVICE_INSTANCE = 389016
 OBJECT_TYPE_LIGHTING_OUTPUT = 54
 LIGHT = (OBJECT_TYPE_LIGHTING_OUTPUT, 1)      # Lighting Output 1 "Jade"
-DEFAULT_PORT = 48020                          # this example's Wire Test port range is 48020-48029
+DEFAULT_PORT = 47830                          # this example's own port (series allocation)
 
 # Lighting Output properties (cl. 12.54; numbers from cl. 21 BACnetPropertyIdentifier).
 PROPERTY_PRESENT_VALUE = wiretest.PROPERTY_PRESENT_VALUE
@@ -66,9 +66,12 @@ NO_FAULT_DETECTED, LAMP_FAILURE = 0, 16
 STATUS_FLAG_FAULT = 1
 STATUS_FLAG_OUT_OF_SERVICE = 3
 
-ERROR_CLASS_PROPERTY = 2
+ERROR_CLASS_OBJECT, ERROR_CLASS_PROPERTY = 1, 2
+ERROR_CODE_UNKNOWN_OBJECT = 31
 ERROR_CODE_VALUE_OUT_OF_RANGE = 37
 ERROR_CODE_WRITE_ACCESS_DENIED = 40
+
+REQUEST_TIMEOUT, RETRIES = 1.0, 2   # a confirmed request unanswered after 1 s is sent again, up to twice (as Light does)
 
 SLACK = 0.35        # seconds allowed for the example's tick and the round trip
 LEVEL_TOLERANCE = 1.0   # percent: a sample's timestamp is only known to within one round trip

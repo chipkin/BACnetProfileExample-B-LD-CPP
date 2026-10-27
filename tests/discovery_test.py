@@ -3,7 +3,7 @@
 # Public-domain example code (CC0) - see ../LICENSE.
 """B-LD discovery: read every property the lighting device says it has, the way a client does.
 
-    python3 tests/discovery_test.py [--exe build/BACnetExampleBLD] [--port 48020]
+    python3 tests/discovery_test.py [--exe build/BACnetExampleBLD] [--port 47830]
 
 What a BACnet client such as Chipkin BACnet Explorer does when it discovers a device,
 done over the wire from outside the example:
@@ -46,6 +46,13 @@ EXPECTED_OBJECTS = [DEVICE,
                     (OBJECT_TYPE_LIGHTING_OUTPUT, 1),            # "Jade"
                     NETWORK_PORT]
 
+# Database_Revision (cl. 12.11): the stack starts it at 0 and adds 1 for each object the
+# example adds at start-up - the Device, Lighting Output 1 and Network Port 1 - and nothing
+# creates, deletes or renames an object afterwards, so it reads 3 for the life of the process
+# (docs/PICS.md).
+PROPERTY_DATABASE_REVISION = 155
+EXPECTED_DATABASE_REVISION = len(EXPECTED_OBJECTS)
+
 # The four properties cl. 12.1.1.4.1 says Property_List does not contain.
 PROPERTY_OBJECT_TYPE = 79
 NOT_IN_PROPERTY_LIST = [wiretest.PROPERTY_OBJECT_IDENTIFIER, wiretest.PROPERTY_OBJECT_NAME,
@@ -70,8 +77,8 @@ def parser():
     arguments = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     arguments.add_argument("--exe", default=str(wiretest.default_exe(REPOSITORY, "BACnetExampleBLD")),
                            help="path to BACnetExampleBLD (default: build/BACnetExampleBLD)")
-    arguments.add_argument("--port", type=int, default=48020,
-                           help="the lighting device's UDP port (default 48020)")
+    arguments.add_argument("--port", type=int, default=47830,
+                           help="the lighting device's UDP port (default 47830)")
     return arguments
 
 
@@ -162,6 +169,11 @@ def main():
             record(f"Network Port 1 {name} ({property_identifier}): listed in Property_List and reads as a value "
                    f"(issue {issue})", listed and failure is None,
                    "not in Property_List" if not listed else (failure or ""))
+
+        database_revision = client.read_property(args.port, *DEVICE, PROPERTY_DATABASE_REVISION, timeout=2.0)
+        record(f"Device Database_Revision reads {EXPECTED_DATABASE_REVISION}, one per object added at start-up "
+               "(docs/PICS.md)", is_value(database_revision) and database_revision.value == EXPECTED_DATABASE_REVISION,
+               outcome(database_revision))
     finally:
         client.close()
         device.stop()
