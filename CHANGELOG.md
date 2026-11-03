@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No changes yet._
+## [1.3.1] - 2026-11-02
+
+Built on CAS BACnet Stack 6.x (`1e7dffe2b`).
+
+### Changed
+
+- **CAS BACnet Stack updated** to 6.x `1e7dffe2b` (still version 6.0.23).
+- **An I-Am also reaches a client on another UDP port.** At this stack
+  version, a broadcast the stack sends without a destination address, such as
+  the I-Am that answers a Who-Is, or an I-Have, is addressed by the example. It
+  still goes to the local subnet broadcast address, and is now also sent
+  unicast to the last client heard from a UDP port other than the example's own,
+  so a tool on the same computer on another port hears the answer. Only the
+  messages the stack addresses itself (network layer messages, I-Am, I-Have)
+  are copied. Vendored `common/` updated to 3.6.1; see `common/CHANGELOG.md`.
+- **README**: the profile example table is the same in every example; the
+  blocked examples are marked with their open stack issue.
+
+### Fixed
+
+- **VeriBACnet project** (`tests/veribacnet/`): the description, EPICS and
+  device snapshot declare the example's own Application_Software_Version (at
+  1.3.0 they still gave the earlier one), so test 7.1.1 compares against the
+  version the example reports.
 
 ## [1.3.0] - 2026-10-27
 

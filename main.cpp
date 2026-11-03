@@ -188,7 +188,7 @@ static const float LIGHTING_STEP_INCREMENT_MAX = 100.0f;
 // 1. Example + device configuration
 // -----------------------------------------------------------------------------
 static const char* APP_NAME = "BACnet B-LD (Lighting Device) Example - C++";
-static const char* APP_VERSION = "1.3.0";
+static const char* APP_VERSION = "1.3.1";
 
 // The device instance. BACnet requires this to be configurable, so it defaults
 // to 389016 and can be overridden on the command line with --deviceID.

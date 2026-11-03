@@ -54,7 +54,7 @@
   "discovered": {
     "capturedAt": "2026-10-22T00:41:15.303Z",
     "readDeviceProperties": {
-      "applicationSoftwareVersion": "1.2.0",
+      "applicationSoftwareVersion": "1.3.1",
       "firmwareRevision": "6.0.23.0",
       "modelName": "CAS BACnet Stack Example - B-LD",
       "objectName": "Chipkin Example B-LD",
@@ -73,7 +73,7 @@
     ]
   },
   "identity": {
-    "applicationSoftwareVersion": "1.2.0",
+    "applicationSoftwareVersion": "1.3.1",
     "deviceInstance": 389016,
     "firmwareRevision": "6.0.23.0",
     "modelName": "CAS BACnet Stack Example - B-LD",

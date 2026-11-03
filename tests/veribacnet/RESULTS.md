@@ -7,8 +7,8 @@ addresses.
 
 | | |
 |---|---|
-| Date | 2026-10-27 |
-| Example | BACnet B-LD (Lighting Device) Example - C++ v1.2.0 (`common/` 3.5.0), CAS BACnet Stack `6.x` @ `69b6249f` |
+| Date | 2026-10-30 |
+| Example | BACnet B-LD (Lighting Device) Example - C++ v1.3.0 (`common/` 3.5.0), CAS BACnet Stack `6.x` @ `69b6249f` |
 | Profile | B-LD (BACnet Lighting Device) |
 | Transport | BACnet/IP, UDP port 47830 |
 | VeriBACnet | 0.20.0, a later build (its test device uses CAS BACnet Stack 6.0.23.0) |
